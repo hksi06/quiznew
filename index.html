@@ -1221,10 +1221,7 @@ function render(){
     state.questionCount = sourceMetrics.recommended;
   }
 
-  if(state.mode === 'solver'){
-    const answeredCount = Object.keys(state.answers).length;
-    const score = state.rendered.reduce((n,q)=> n + ((state.answers[q.id]||'')===q.displayCorrect ? 1 : 0), 0);
-    if(!state.authReady){
+  if(state.mode !== 'solver' && !state.authReady){
     app.innerHTML = `
       <div class="card">
         <h1>Quiz Builder</h1>
@@ -1234,7 +1231,7 @@ function render(){
     return;
   }
 
-  if(!state.authUser){
+  if(state.mode !== 'solver' && !state.authUser){
     app.innerHTML = `
       <div class="card">
         <div class="topbar">
@@ -1283,7 +1280,11 @@ function render(){
     return;
   }
 
-  app.innerHTML = `
+  if(state.mode === 'solver'){
+    const answeredCount = Object.keys(state.answers).length;
+    const score = state.rendered.reduce((n,q)=> n + ((state.answers[q.id]||'')===q.displayCorrect ? 1 : 0), 0);
+
+    app.innerHTML = `
       <div class="card">
         <div class="topbar">
           <div>
