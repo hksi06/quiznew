@@ -1,0 +1,1560 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Quiz Builder</title>
+  <style>
+    :root{
+      --bg:#f6f7fb; --card:#ffffff; --text:#1f2937; --muted:#6b7280; --line:#e5e7eb;
+      --primary:#2563eb; --primary-soft:#dbeafe; --green:#15803d; --green-soft:#dcfce7;
+      --red:#b91c1c; --red-soft:#fee2e2; --amber:#92400e; --amber-soft:#fef3c7;
+      --shadow:0 8px 24px rgba(17,24,39,.08); --radius:18px;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);line-height:1.6}
+    .wrap{max-width:1120px;margin:0 auto;padding:24px}
+    .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:22px;margin-bottom:18px}
+    h1,h2,h3{margin:0 0 10px 0;line-height:1.25}
+    h1{font-size:30px} h2{font-size:22px} h3{font-size:18px}
+    p{margin:8px 0}
+    .muted{color:var(--muted)}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+    @media (max-width:780px){.row{grid-template-columns:1fr}}
+    label{display:block;font-weight:600;margin-bottom:6px}
+    input[type="text"], input[type="number"], select, textarea, input[type="file"]{
+      width:100%;border:1px solid var(--line);border-radius:14px;padding:12px 14px;font:inherit;background:#fff
+    }
+    textarea{min-height:220px;resize:vertical}
+    .btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+    button,.buttonlink{
+      border:none;background:var(--primary);color:#fff;border-radius:14px;padding:11px 16px;
+      font:inherit;font-weight:700;cursor:pointer;text-decoration:none;display:inline-block
+    }
+    button.secondary,.buttonlink.secondary{background:#fff;color:var(--text);border:1px solid var(--line)}
+    button.ghost,.buttonlink.ghost{background:#eef2ff;color:#1e3a8a}
+    button:disabled{opacity:.55;cursor:not-allowed}
+    .pill{display:inline-block;background:#eef2ff;color:#3730a3;border-radius:999px;padding:6px 10px;font-size:13px;font-weight:700;margin-right:8px}
+    .alert{border-radius:14px;padding:12px 14px;border:1px solid var(--line);background:#fff}
+    .alert.error{background:var(--red-soft);color:#7f1d1d;border-color:#fecaca}
+    .alert.info{background:var(--primary-soft);color:#1e3a8a;border-color:#bfdbfe}
+    .alert.ok{background:var(--green-soft);color:#14532d;border-color:#bbf7d0}
+    .switches{display:grid;gap:12px}
+    .switchrow{display:flex;justify-content:space-between;gap:12px;align-items:center;border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+    .question{margin-bottom:16px}
+    .selected-for-regeneration{border-color:#bfdbfe;box-shadow:0 0 0 2px #dbeafe inset}
+    .option{border:1px solid var(--line);border-radius:16px;padding:12px 14px;margin-top:10px;background:#fff;transition:.15s ease}
+    .option:hover{border-color:#c7d2fe}
+    .option.selected{border-color:#93c5fd;background:#f8fbff}
+    .option.correct{border-color:#86efac;background:#f0fdf4}
+    .option.wrong{border-color:#fca5a5;background:#fef2f2}
+    .feedback{margin-top:12px;border:1px solid var(--line);border-radius:16px;padding:14px;background:#fafafa}
+    .feedback.correct{background:var(--green-soft);border-color:#bbf7d0}
+    .feedback.incorrect{background:var(--amber-soft);border-color:#fde68a}
+    .small{font-size:14px}
+    .topbar{display:flex;justify-content:space-between;gap:14px;align-items:flex-start;flex-wrap:wrap}
+    .dropzone{border:2px dashed #bfdbfe;border-radius:16px;padding:18px;text-align:center;background:#f8fbff;transition:.15s ease}
+    .dropzone.drag{background:#eff6ff;border-color:#60a5fa}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace}
+    .list-head,.list-row{display:grid;grid-template-columns:1.3fr .9fr .8fr auto;gap:12px;align-items:center}
+    .list-head{padding:0 6px 10px 6px;color:var(--muted);font-size:13px;font-weight:700}
+    .list-row{padding:12px 6px;border-top:1px solid var(--line)}
+    .promptbox{margin-top:14px;padding:14px;border:1px solid var(--line);border-radius:16px;background:#fafafa}
+    .promptbox summary{cursor:pointer;font-weight:700}
+    .review-head{display:flex;justify-content:space-between;gap:14px;align-items:flex-start;flex-wrap:wrap}
+    .review-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
+    .review-panel{border:1px solid var(--line);border-radius:16px;padding:14px;background:#fafafa}
+    .review-panel h4{margin:0 0 10px 0;font-size:16px}
+    .review-option{padding:8px 10px;border:1px solid var(--line);border-radius:12px;background:#fff;margin-top:8px}
+    .review-option.correct{border-color:#86efac;background:#f0fdf4}
+    .review-note{min-height:96px}
+    .section-spacer{margin-top:16px}
+    @media (max-width:900px){
+      .list-head{display:none}
+      .list-row{grid-template-columns:1fr;gap:8px}
+    }
+  </style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+<script>
+const DEFAULT_SUPABASE_URL = "https://pkabndydlnpjpfyxkaao.supabase.co";
+const DEFAULT_SUPABASE_PUBLISHABLE_KEY = "sb_publishable_5DSYUyEVrvTSOspr9LTN4w_RByBkdyp";
+const STORAGE_KEY = "quiz_builder_supabase_list_v5";
+const QUIZ_META_KEY = "quiz_builder_saved_quiz_meta_v1";
+const PROMPT_DEFAULTS_VERSION = 1;
+
+const SAMPLE_TSV = `No\tQuestion\tOption A\tOption B\tOption C\tOption D\tCorrect Answer\tExplanation\tSupporting Excerpt
+1\tWhich statement about an ideal renal biomarker is appropriate?\tIt should show wide biologic variability and partial protein binding.\tIt should be easy to measure and cost-effective.\tIt should undergo substantial non-renal metabolism.\tIt should be secreted and reabsorbed by the tubules.\tB\tThe chapter lists easy measurability and cost-effectiveness among the ideal properties of a renal biomarker.\tThe ideal properties of a renal biomarker include ... easy measurability, and cost-effectiveness.`;
+
+const DEFAULT_SYSTEM_PROMPT = `You create high-quality bilingual veterinary textbook quizzes and follow the requested output schema exactly. Questions must read like standalone exam items that test general knowledge derived from the source, not like reading-comprehension questions about a specific chapter, text, passage, excerpt, or textbook. Distractors must be subtle, plausible, and parallel to the correct answer rather than obviously wrong, absurd, or from an unrelated domain.`;
+
+const DEFAULT_PROMPT_TEMPLATE = `You are creating bilingual multiple-choice quiz questions from a textbook excerpt.
+
+Follow these rules strictly:
+- Use only the provided source text as evidence.
+- Do not use outside knowledge.
+- Create exactly {{questionCount}} four-option multiple-choice questions.
+- Output both English and Japanese versions for each question.
+- Use natural Japanese.
+- The question stem should ask what is correct/appropriate, not "which matches the text".
+- Questions must read like standalone exam items, not like reading-comprehension questions about a chapter or passage.
+- Never mention the chapter, text, textbook, excerpt, passage, source text, 本文, 抜粋文, この章, このチャプター, この教科書, or このテキスト in the question stem or explanation.
+- Before finalizing each question, rewrite any text-referential wording into a general-knowledge wording.
+- Make distractors genuinely competitive:
+  - Each incorrect option should sound plausible to a learner with partial understanding.
+  - Keep all four options in the same domain, same level of specificity, and similar length/tone.
+  - Avoid absurd, opposite, unrelated, or giveaway distractors.
+  - Avoid options that can be ruled out instantly because they are too broad, too narrow, or grammatically mismatched.
+  - Prefer nuanced distinctions in mechanism, indication, interpretation, timing, severity, definition, or comparative appropriateness.
+- Avoid giveaway wording such as "always", "never", "unnecessary", "only", "exclusively", "不要", "常に", and "十分である".
+- Do not bold the correct answer.
+- Randomize correct answer positions across questions.
+- Include a brief explanation in English and Japanese.
+- Include brief choice-by-choice explanations in English and Japanese for options A, B, C, and D, explaining why the correct answer is correct and why each incorrect option is not the best answer.
+- Include a short supporting excerpt copied or lightly trimmed from the source text.
+- If an abbreviation first appears in a question or explanation, spell it out first.
+- Do not create questions from reference lists, bibliography entries, author lists, acknowledgments, client information, further reading lists, or citation-only material.
+- If such non-teaching sections appear in the pasted text, ignore them and use only the substantive textbook content.
+- Return JSON only.
+- The output must match the schema exactly.
+・教科書によると、囲み記事では、本文では、このテキストでは、抜粋文では、などの表現を使わず、一般的な知識を問う問題文にしてください。
+・問題文は独立した試験問題のように見える文章にしてください。
+・誤答選択肢は、部分理解の受験者なら選びうるもっともらしい内容にしてください。
+・誤答選択肢は、極端に不自然、露骨に逆、本文と無関係、長さや粒度が明らかに不揃い、という形にしないでください。
+・4つの選択肢は、同じ話題・同じ粒度・近い長さでそろえてください。
+・onlyやexclusivelyなどの正誤がわかりやすい表現は避けてください。
+・引用文献リスト、参考文献、著者情報、謝辞、client information などから作問しないでください。
+
+Source text:
+"""{{sourceText}}"""`;
+
+function escapeHtml(s=''){ return s.replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
+function norm(s=''){ return s.toLowerCase().replace(/[\s_\-・（）()]/g,'').replace(/：/g,'').trim(); }
+function slugify(s=''){
+  return s.toLowerCase().normalize('NFKD').replace(/[^\w\s-]/g,'').trim().replace(/\s+/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'').slice(0,80);
+}
+function shuffleArray(arr){
+  const a = arr.slice();
+  for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
+  return a;
+}
+function parseTSV(tsv){
+  const lines = tsv.replace(/\r\n/g,"\n").replace(/\r/g,"\n").split("\n").filter(x=>x.trim());
+  if(lines.length<2) throw new Error("TSVの行数が足りません。ヘッダー行と少なくとも1問分のデータが必要です。");
+  const headers = lines[0].split("\t").map(x=>x.trim());
+  const h = headers.map(norm);
+  const idx = (...cands)=>{ for(const c of cands){ const i=h.indexOf(norm(c)); if(i>=0) return i; } return -1; };
+  const map = {
+    no: idx("No","番号","questionno"),
+    q: idx("Question","問題","Question title","Questiontitle"),
+    a: idx("Option A","A","選択肢A"),
+    b: idx("Option B","B","選択肢B"),
+    c: idx("Option C","C","選択肢C"),
+    d: idx("Option D","D","選択肢D"),
+    correct: idx("Correct Answer","Correct","Answer","正答","正解","解答"),
+    explanation: idx("Explanation","解説","Feedback","Answer feedback"),
+    aexp: idx("Option A Explanation","A Explanation","Option A Note","A Note","選択肢A解説","選択肢Aの解説"),
+    bexp: idx("Option B Explanation","B Explanation","Option B Note","B Note","選択肢B解説","選択肢Bの解説"),
+    cexp: idx("Option C Explanation","C Explanation","Option C Note","C Note","選択肢C解説","選択肢Cの解説"),
+    dexp: idx("Option D Explanation","D Explanation","Option D Note","D Note","選択肢D解説","選択肢Dの解説"),
+    excerpt: idx("Supporting Excerpt","Excerpt","根拠","根拠本文抜粋","本文抜粋"),
+  };
+  const required = ["q","a","b","c","d","correct"].filter(k=>map[k]===-1);
+  if(required.length) throw new Error("必要な列が見つかりません: " + required.join(", "));
+  return lines.slice(1).map((line,i)=>{
+    const cells = line.split("\t");
+    const correct = ((cells[map.correct]||"").trim().toUpperCase());
+    if(!["A","B","C","D"].includes(correct)) throw new Error((i+2)+"行目の正答がA/B/C/Dになっていません。");
+    return {
+      id: (cells[map.no]||String(i+1)).trim(),
+      question: (cells[map.q]||"").trim(),
+      options: { A:(cells[map.a]||"").trim(), B:(cells[map.b]||"").trim(), C:(cells[map.c]||"").trim(), D:(cells[map.d]||"").trim() },
+      correct,
+      explanation: map.explanation>=0 ? (cells[map.explanation]||"").trim() : "",
+      optionExplanations: {
+        A: map.aexp>=0 ? (cells[map.aexp]||"").trim() : "",
+        B: map.bexp>=0 ? (cells[map.bexp]||"").trim() : "",
+        C: map.cexp>=0 ? (cells[map.cexp]||"").trim() : "",
+        D: map.dexp>=0 ? (cells[map.dexp]||"").trim() : "",
+      },
+      excerpt: map.excerpt>=0 ? (cells[map.excerpt]||"").trim() : "",
+    };
+  }).filter(r => r.question && r.options.A && r.options.B && r.options.C && r.options.D);
+}
+function buildQuestions(questions, shuffleQ, shuffleC){
+  let qs = questions.map(q=>{
+    let entries = Object.entries(q.options).map(([k,v])=>({orig:k, text:v}));
+    if(shuffleC) entries = shuffleArray(entries);
+    const displayOptions = {}, map = {}, displayOptionExplanations = {};
+    ["A","B","C","D"].forEach((key, idx)=>{
+      displayOptions[key]=entries[idx].text;
+      map[key]=entries[idx].orig;
+      displayOptionExplanations[key] = (q.optionExplanations && q.optionExplanations[entries[idx].orig]) || q[`optionExplanation${entries[idx].orig}`] || '';
+    });
+    const displayCorrect = Object.keys(map).find(k => map[k]===q.correct) || q.correct;
+    return {...q, displayOptions, displayCorrect, displayOptionExplanations};
+  });
+  if(shuffleQ) qs = shuffleArray(qs);
+  return qs;
+}
+function tsvEscape(value=''){
+  return String(value).replace(/\t/g, " ").replace(/\r?\n/g, " ").trim();
+}
+function makeTsvEnFromQuestions(questions){
+  const header = [
+    "No","Question","Option A","Option B","Option C","Option D",
+    "Correct Answer","Explanation","Option A Explanation","Option B Explanation","Option C Explanation","Option D Explanation","Supporting Excerpt"
+  ];
+  const lines = [header.join("\t")];
+  questions.forEach((q, i)=>{
+    lines.push([
+      String(i+1),
+      q.question_en || "",
+      q.optionA_en || "",
+      q.optionB_en || "",
+      q.optionC_en || "",
+      q.optionD_en || "",
+      q.correct || "",
+      q.explanation_en || "",
+      q.optionA_explanation_en || "",
+      q.optionB_explanation_en || "",
+      q.optionC_explanation_en || "",
+      q.optionD_explanation_en || "",
+      q.excerpt || "",
+    ].map(tsvEscape).join("\t"));
+  });
+  return lines.join("\n");
+}
+function makeTsvJaFromQuestions(questions){
+  const header = [
+    "No","Question","Option A","Option B","Option C","Option D",
+    "Correct Answer","Explanation","Option A Explanation","Option B Explanation","Option C Explanation","Option D Explanation","Supporting Excerpt"
+  ];
+  const lines = [header.join("\t")];
+  questions.forEach((q, i)=>{
+    lines.push([
+      String(i+1),
+      q.question_ja || "",
+      q.optionA_ja || "",
+      q.optionB_ja || "",
+      q.optionC_ja || "",
+      q.optionD_ja || "",
+      q.correct || "",
+      q.explanation_ja || "",
+      q.optionA_explanation_ja || "",
+      q.optionB_explanation_ja || "",
+      q.optionC_explanation_ja || "",
+      q.optionD_explanation_ja || "",
+      q.excerpt || "",
+    ].map(tsvEscape).join("\t"));
+  });
+  return lines.join("\n");
+}
+function isAllCapsHeading(line=''){
+  const s = line.trim();
+  if (!s) return false;
+  if (s.length < 4 || s.length > 120) return false;
+  if (!/[A-Z]/.test(s)) return false;
+  return /^[A-Z0-9 ,;:'"()\/\-\u2019&.]+$/.test(s);
+}
+function splitIntoSections(text=''){
+  const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+  const sections = [];
+  let current = [];
+  for (const line of lines) {
+    if (isAllCapsHeading(line) && current.length) {
+      sections.push(current.join("\n").trim());
+      current = [line];
+    } else {
+      current.push(line);
+    }
+  }
+  if (current.length) sections.push(current.join("\n").trim());
+  return sections.filter(Boolean);
+}
+const EXCLUDED_SECTION_HEADINGS = [
+  'REFERENCES',
+  'REFERENCE',
+  'BIBLIOGRAPHY',
+  'FURTHER READING',
+  'SUGGESTED READING',
+  'CLIENT INFORMATION',
+  'CLIENT INFORMATION SHEET',
+  'ACKNOWLEDGMENTS',
+  'ACKNOWLEDGEMENTS',
+  'AUTHOR INFORMATION',
+  'AUTHOR AFFILIATIONS',
+];
+function normalizeHeadingForMatch(s=''){
+  return s.toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim();
+}
+function isExcludedSectionHeading(line=''){
+  const normalized = normalizeHeadingForMatch(line);
+  if (!normalized) return false;
+  return EXCLUDED_SECTION_HEADINGS.some(head => normalized === head || normalized.startsWith(head + ' '));
+}
+function preprocessSourceText(text=''){
+  const clean = String(text || '').replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
+  if (!clean) return '';
+
+  const sections = splitIntoSections(clean);
+  if (sections.length > 1) {
+    return sections
+      .filter(section => {
+        const firstLine = (section.split("\n").find(line => line.trim()) || '').trim();
+        return !isExcludedSectionHeading(firstLine);
+      })
+      .join("\n\n")
+      .trim();
+  }
+
+  const lines = clean.split("\n");
+  const firstExcludedIndex = lines.findIndex(line => isExcludedSectionHeading(line));
+  if (firstExcludedIndex >= 0) {
+    return lines.slice(0, firstExcludedIndex).join("\n").trim();
+  }
+
+  return clean;
+}
+function splitLargeTextFallback(text, maxChars){
+  const paragraphs = text.split(/\n{2,}/).map(s=>s.trim()).filter(Boolean);
+  if (paragraphs.length === 0) return [text];
+  const chunks = [];
+  let current = "";
+  for (const p of paragraphs) {
+    const candidate = current ? `${current}\n\n${p}` : p;
+    if (candidate.length <= maxChars || !current) {
+      current = candidate;
+    } else {
+      chunks.push(current);
+      current = p;
+    }
+  }
+  if (current) chunks.push(current);
+  return chunks;
+}
+function splitSourceIntoChunks(sourceText, questionCount){
+  const clean = sourceText.trim();
+  const maxChars = questionCount > 10 ? 9000 : 12000;
+
+  let sections = splitIntoSections(clean);
+  if (sections.length <= 1) {
+    sections = splitLargeTextFallback(clean, maxChars);
+  }
+
+  let chunks = [];
+  let current = "";
+
+  for (const section of sections) {
+    const candidate = current ? `${current}\n\n${section}` : section;
+    if (candidate.length <= maxChars || !current) {
+      current = candidate;
+    } else {
+      chunks.push(current);
+      current = section;
+    }
+  }
+  if (current) chunks.push(current);
+
+  if (chunks.length === 1 && clean.length > maxChars) {
+    chunks = splitLargeTextFallback(clean, maxChars);
+  }
+
+  while (chunks.length > questionCount) {
+    const last = chunks.pop();
+    chunks[chunks.length - 1] = `${chunks[chunks.length - 1]}\n\n${last}`;
+  }
+
+  return chunks.filter(Boolean);
+}
+function allocateQuestions(total, chunks){
+  const n = chunks.length;
+  if (n === 1) return [total];
+  const lengths = chunks.map(c => Math.max(c.length, 1));
+  const sum = lengths.reduce((a,b)=>a+b,0);
+
+  let alloc = new Array(n).fill(1);
+  let remaining = total - n;
+
+  if (remaining < 0) {
+    return new Array(total).fill(1);
+  }
+
+  const exactExtras = lengths.map(len => (len / sum) * remaining);
+  const floorExtras = exactExtras.map(x => Math.floor(x));
+  alloc = alloc.map((v, i) => v + floorExtras[i]);
+  let distributed = floorExtras.reduce((a,b)=>a+b,0);
+  let leftovers = remaining - distributed;
+
+  const order = exactExtras
+    .map((x, i) => ({ i, frac: x - Math.floor(x) }))
+    .sort((a,b) => b.frac - a.frac);
+
+  let idx = 0;
+  while (leftovers > 0) {
+    alloc[order[idx % order.length].i] += 1;
+    leftovers -= 1;
+    idx += 1;
+  }
+
+  return alloc;
+}
+
+function clampNumber(value, min, max){
+  return Math.max(min, Math.min(max, value));
+}
+function estimateWordCountFromCleanText(clean=''){
+  const text = String(clean || '').trim();
+  if(!text) return 0;
+  const latinTokens = text.match(/[A-Za-z0-9]+(?:['’.-][A-Za-z0-9]+)*/g) || [];
+  const whitespaceWords = text.split(/\s+/).filter(Boolean).length;
+  const japaneseChars = (text.match(/[぀-ヿ㐀-鿿]/g) || []).length;
+  const japaneseApproxWords = japaneseChars ? Math.round(japaneseChars / 2.5) : 0;
+  return Math.max(latinTokens.length, whitespaceWords, japaneseApproxWords);
+}
+function getQuestionCountMetrics(text=''){
+  const raw = String(text || '').trim();
+  const cleanedText = preprocessSourceText(raw);
+  const estimatedWords = estimateWordCountFromCleanText(cleanedText);
+  const recommended = cleanedText ? clampNumber(Math.round(estimatedWords / 333), 5, 20) : 10;
+  return {
+    cleanedText,
+    estimatedWords,
+    recommended,
+    removedChars: Math.max(0, raw.length - cleanedText.length),
+  };
+}
+function questionCountHintHtml(metrics){
+  if(!metrics.cleanedText){
+    return '本文を貼り付けると、参考文献などを除いた本文量から推奨問題数を自動計算します。';
+  }
+  return `本文推定語数: <span class="mono">${metrics.estimatedWords.toLocaleString('en-US')}</span> words ・ 推奨: <span class="mono">${metrics.recommended}</span>問`;
+}
+function syncQuestionCountUi(){
+  const metrics = getQuestionCountMetrics(state.sourceText);
+  const hint = document.getElementById('questionCountHint');
+  if(hint) hint.innerHTML = questionCountHintHtml(metrics);
+  const modeHint = document.getElementById('questionCountModeHint');
+  if(modeHint){
+    modeHint.textContent = state.questionCountMode === 'auto'
+      ? '本文量に応じた自動設定中です。必要なら手動で変更できます。'
+      : '手動設定中です。「本文長から再計算」を押すと推奨値に戻せます。';
+  }
+  const input = document.getElementById('questionCount');
+  if(input && state.questionCountMode === 'auto'){
+    input.value = String(metrics.recommended);
+  }
+}
+function applyAutoQuestionCount({ force=false, syncDom=false }={}){
+  const metrics = getQuestionCountMetrics(state.sourceText);
+  if(force || state.questionCountMode === 'auto'){
+    state.questionCount = metrics.recommended;
+  }
+  if(syncDom){
+    syncQuestionCountUi();
+  }
+  return metrics;
+}
+
+const state = {
+  mode: 'builder',
+  title: 'Chapter Quiz',
+  description: '',
+  slug: '',
+  tsv: '',
+  questions: [],
+  rendered: [],
+  answers: {},
+  error: '',
+  status: '',
+  shareLink: '',
+  shareLinks: { en: '', ja: '' },
+  quizList: [],
+  listStatus: '',
+  shuffleQuestions: false,
+  shuffleChoices: false,
+  supabaseUrl: DEFAULT_SUPABASE_URL,
+  supabaseKey: DEFAULT_SUPABASE_PUBLISHABLE_KEY,
+  sourceText: '',
+  questionCount: 10,
+  questionCountMode: 'auto',
+  aiStatus: '',
+  aiError: '',
+  generatedEnTsv: '',
+  generatedJaTsv: '',
+  systemPrompt: DEFAULT_SYSTEM_PROMPT,
+  promptTemplate: DEFAULT_PROMPT_TEMPLATE,
+  autoSaveLanguage: 'en',
+  promptMode: 'default',
+  quizMeta: {},
+  listSearch: '',
+  listSort: 'created_desc',
+  showHidden: false,
+  previewQuestions: [],
+  reviewNotes: {},
+  reviewBusyNo: null,
+  reviewUpdatedNos: {},
+  reviewStatus: '',
+  reviewError: '',
+};
+
+function clearBuilderVolatileState(){
+  state.title = 'Chapter Quiz';
+  state.description = '';
+  state.slug = '';
+  state.tsv = '';
+  state.questions = [];
+  state.rendered = [];
+  state.answers = {};
+  state.error = '';
+  state.status = '';
+  state.shareLink = '';
+  state.shareLinks = { en: '', ja: '' };
+  state.sourceText = '';
+  state.questionCount = 10;
+  state.questionCountMode = 'auto';
+  state.aiStatus = '';
+  state.aiError = '';
+  state.generatedEnTsv = '';
+  state.generatedJaTsv = '';
+  state.previewQuestions = [];
+  state.reviewNotes = {};
+  state.reviewBusyNo = null;
+  state.reviewUpdatedNos = {};
+  state.reviewStatus = '';
+  state.reviewError = '';
+}
+
+function syncPromptMode(){
+  state.promptMode = (
+    state.systemPrompt === DEFAULT_SYSTEM_PROMPT &&
+    state.promptTemplate === DEFAULT_PROMPT_TEMPLATE
+  ) ? 'default' : 'custom';
+}
+
+function saveLocal(){
+  if(state.mode === 'solver') return;
+  syncPromptMode();
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({
+    supabaseUrl: state.supabaseUrl,
+    supabaseKey: state.supabaseKey,
+    shuffleQuestions: state.shuffleQuestions,
+    shuffleChoices: state.shuffleChoices,
+    promptMode: state.promptMode,
+    promptDefaultsVersion: PROMPT_DEFAULTS_VERSION,
+    systemPrompt: state.promptMode === 'custom' ? state.systemPrompt : '',
+    promptTemplate: state.promptMode === 'custom' ? state.promptTemplate : '',
+    autoSaveLanguage: state.autoSaveLanguage,
+    listSort: state.listSort,
+    showHidden: state.showHidden,
+  }));
+}
+
+function loadLocal(){
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if(!raw) return;
+  try{
+    const s = JSON.parse(raw);
+    state.supabaseUrl = s.supabaseUrl || state.supabaseUrl;
+    state.supabaseKey = s.supabaseKey || state.supabaseKey;
+    state.shuffleQuestions = !!s.shuffleQuestions;
+    state.shuffleChoices = !!s.shuffleChoices;
+    state.autoSaveLanguage = s.autoSaveLanguage || 'en';
+    state.listSort = s.listSort || 'created_desc';
+    state.showHidden = !!s.showHidden;
+
+    if (s.promptMode === 'custom' && Number(s.promptDefaultsVersion || 0) === PROMPT_DEFAULTS_VERSION) {
+      state.systemPrompt = s.systemPrompt || DEFAULT_SYSTEM_PROMPT;
+      state.promptTemplate = s.promptTemplate || DEFAULT_PROMPT_TEMPLATE;
+      state.promptMode = 'custom';
+    } else {
+      state.systemPrompt = DEFAULT_SYSTEM_PROMPT;
+      state.promptTemplate = DEFAULT_PROMPT_TEMPLATE;
+      state.promptMode = 'default';
+    }
+  }catch(e){}
+}
+
+function saveQuizMeta(){
+  localStorage.setItem(QUIZ_META_KEY, JSON.stringify(state.quizMeta || {}));
+}
+
+function loadQuizMeta(){
+  const raw = localStorage.getItem(QUIZ_META_KEY);
+  if(!raw) return;
+  try{
+    state.quizMeta = JSON.parse(raw) || {};
+  }catch(e){
+    state.quizMeta = {};
+  }
+}
+
+function getQuizMeta(slug=''){
+  return state.quizMeta[slug] || { hidden: false, used: false };
+}
+
+function setQuizMeta(slug, patch){
+  if(!slug) return;
+  state.quizMeta[slug] = { ...getQuizMeta(slug), ...patch };
+  saveQuizMeta();
+}
+
+function buildQuizQuestionsForLanguage(sourceQuestions, language='en'){
+  return (sourceQuestions || []).map((q, i)=>({
+    id: String(q.no || (i + 1)),
+    language,
+    question: language === 'ja' ? (q.question_ja || '') : (q.question_en || ''),
+    options: {
+      A: language === 'ja' ? (q.optionA_ja || '') : (q.optionA_en || ''),
+      B: language === 'ja' ? (q.optionB_ja || '') : (q.optionB_en || ''),
+      C: language === 'ja' ? (q.optionC_ja || '') : (q.optionC_en || ''),
+      D: language === 'ja' ? (q.optionD_ja || '') : (q.optionD_en || ''),
+    },
+    correct: q.correct || 'A',
+    explanation: language === 'ja' ? (q.explanation_ja || '') : (q.explanation_en || ''),
+    optionExplanations: {
+      A: language === 'ja' ? (q.optionA_explanation_ja || '') : (q.optionA_explanation_en || ''),
+      B: language === 'ja' ? (q.optionB_explanation_ja || '') : (q.optionB_explanation_en || ''),
+      C: language === 'ja' ? (q.optionC_explanation_ja || '') : (q.optionC_explanation_en || ''),
+      D: language === 'ja' ? (q.optionD_explanation_ja || '') : (q.optionD_explanation_en || ''),
+    },
+    excerpt: q.excerpt || '',
+  }));
+}
+
+function getPreviewChoiceExplanation(q, key, language='en'){
+  return language === 'ja' ? (q[`option${key}_explanation_ja`] || '') : (q[`option${key}_explanation_en`] || '');
+}
+
+function renderPreviewChoiceExplanationBlock(q, language='en'){
+  const items = ['A','B','C','D'].map(key=>{
+    const text = getPreviewChoiceExplanation(q, key, language);
+    if(!text) return '';
+    return `<div class="small" style="margin-top:6px;"><strong>${key}.</strong> ${escapeHtml(text)}</div>`;
+  }).filter(Boolean).join('');
+  if(!items) return '';
+  return `<div style="margin-top:12px;"><strong>${language === 'ja' ? '各選択肢の解説' : 'Choice-by-choice notes'}</strong><div style="margin-top:6px;">${items}</div></div>`;
+}
+
+function renderSavedChoiceExplanationBlock(q, language='en'){
+  const items = ['A','B','C','D'].map(key=>{
+    const text = (q.displayOptionExplanations && q.displayOptionExplanations[key]) || (q.optionExplanations && q.optionExplanations[key]) || q[`optionExplanation${key}`] || '';
+    if(!text) return '';
+    return `<div class="small" style="margin-top:6px;"><strong>${key}.</strong> ${escapeHtml(text)}</div>`;
+  }).filter(Boolean).join('');
+  if(!items) return '';
+  return `<div style="margin-top:8px;"><strong>${language === 'ja' ? '各選択肢の解説' : 'Choice-by-choice notes'}</strong><div style="margin-top:6px;">${items}</div></div>`;
+}
+
+function getSupabaseBaseUrl(){
+  let url = String(state.supabaseUrl || DEFAULT_SUPABASE_URL).trim();
+  if(!url) url = DEFAULT_SUPABASE_URL;
+  url = url.replace(/\/+$/g, '');
+  url = url.replace(/\/rest\/v1$/i, '');
+  url = url.replace(/\/functions\/v1$/i, '');
+  return url || DEFAULT_SUPABASE_URL;
+}
+
+function compactPromptText(s='', maxLen=260){
+  return String(s).replace(/\s+/g, ' ').trim().slice(0, maxLen);
+}
+
+function getUpdatedReviewCount(){
+  return Object.keys(state.reviewUpdatedNos || {}).length;
+}
+
+function buildReplacementPromptTemplate(groupQuestions, keptQuestions){
+  const flaggedText = groupQuestions.map(q => {
+    const note = (state.reviewNotes[String(q.no)] || '').trim();
+    return [
+      `Slot ${q.no}`,
+      `Current English question: ${compactPromptText(q.question_en, 360)}`,
+      `Current Japanese question: ${compactPromptText(q.question_ja, 360)}`,
+      `Current correct answer: ${q.correct || ''}`,
+      `Current supporting excerpt: ${compactPromptText(q.excerpt || '', 280)}`,
+      `Mandatory reviewer instruction: ${note || 'Improve clarity, accuracy, natural wording, and fit to the source text.'}`,
+    ].join('\n');
+  }).join('\n\n');
+
+  const keptText = keptQuestions.length
+    ? keptQuestions.map(q => `- Slot ${q.no}: ${compactPromptText(q.question_en, 260)}`).join('\n')
+    : '- None';
+
+  return `You are revising selected questions in a bilingual veterinary textbook quiz.
+
+Follow these rules strictly:
+- Use only the provided source text as evidence.
+- Do not use outside knowledge.
+- Generate exactly {{questionCount}} replacement questions.
+- Return the replacement questions in the same order as the flagged slots below.
+- Set the "no" field of each returned item to the original slot number shown below.
+- Keep the output bilingual in English and Japanese.
+- Keep the output schema exactly.
+- Do not duplicate the remaining kept questions listed below.
+- Treat each mandatory reviewer instruction below as a hard requirement.
+- If a reviewer instruction conflicts with the current question, rewrite the question so that the instruction is satisfied.
+- Do not create questions from reference lists, bibliography entries, author lists, acknowledgments, client information, further reading lists, or citation-only material.
+- If the current question appears to be based on citation-only material or a reference list, replace it with a new question based on substantive textbook prose from the source text.
+- The question stem should ask what is correct/appropriate, not "which matches the text".
+- Questions must read like standalone exam items, not like reading-comprehension questions about a chapter or passage.
+- Never mention the chapter, text, textbook, excerpt, passage, source text, 本文, 抜粋文, この章, このチャプター, この教科書, or このテキスト in the question stem or explanation.
+- Before finalizing each question, rewrite any text-referential wording into a general-knowledge wording.
+- Make distractors genuinely competitive:
+  - Each incorrect option should sound plausible to a learner with partial understanding.
+  - Keep all four options in the same domain, same level of specificity, and similar length/tone.
+  - Avoid absurd, opposite, unrelated, or giveaway distractors.
+  - Avoid options that can be ruled out instantly because they are too broad, too narrow, or grammatically mismatched.
+  - Prefer nuanced distinctions in mechanism, indication, interpretation, timing, severity, definition, or comparative appropriateness.
+- Avoid obvious giveaway wording such as "always", "never", "only", "exclusively", "不要", "常に", and "十分である".
+- Include a brief explanation in English and Japanese.
+- Include brief choice-by-choice explanations in English and Japanese for options A, B, C, and D, explaining why the correct answer is correct and why each incorrect option is not the best answer.
+- Include a short supporting excerpt copied or lightly trimmed from the source text.
+- Return JSON only.
+
+Flagged slots to replace:
+${flaggedText}
+
+Remaining kept questions to avoid duplicating:
+${keptText}
+
+Source text:
+"""{{sourceText}}"""`;
+}
+
+function clearReviewSelections(){
+  state.reviewNotes = {};
+  state.reviewBusyNo = null;
+  state.reviewUpdatedNos = {};
+}
+
+function resetRendered(){
+  state.rendered = buildQuestions(state.questions, state.shuffleQuestions, state.shuffleChoices);
+  state.answers = {};
+}
+
+function getSlugFromQuery(){
+  const p = new URLSearchParams(location.search);
+  return p.get('quiz');
+}
+
+async function supabaseRequest(path, {method='GET', body=null, prefer=''}={}){
+  const headers = {
+    'apikey': state.supabaseKey,
+    'Authorization': 'Bearer ' + state.supabaseKey,
+  };
+  if(body !== null) headers['Content-Type'] = 'application/json';
+  if(prefer) headers['Prefer'] = prefer;
+  const baseUrl = getSupabaseBaseUrl();
+  let res;
+  try{
+    res = await fetch(baseUrl + path, { method, headers, body: body !== null ? JSON.stringify(body) : undefined });
+  }catch(err){
+    throw new Error(`Supabaseに接続できませんでした。URL設定またはネットワークを確認してください。 (${baseUrl})`);
+  }
+  if(!res.ok){
+    const text = await res.text();
+    throw new Error(`Supabase error ${res.status}: ${text}`);
+  }
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
+}
+
+async function findAvailableSlug(baseSlug){
+  const base = baseSlug || slugify(state.title) || 'quiz';
+  const query = `/rest/v1/quizzes?select=slug&or=(slug.eq.${encodeURIComponent(base)},slug.like.${encodeURIComponent(base + '-%')})`;
+  const existing = await supabaseRequest(query, {method:'GET'});
+  const slugs = new Set((existing || []).map(x => x.slug));
+  if(!slugs.has(base)) return base;
+  let n = 2;
+  while(slugs.has(`${base}-${n}`)) n++;
+  return `${base}-${n}`;
+}
+
+async function saveQuizToSupabase({autoSlug = false, language = 'en'} = {}){
+  if(!state.questions.length) throw new Error('先にクイズを生成してください。');
+
+  const languageSuffix = language === 'ja' ? 'ja' : 'en';
+  const baseSlugCore = slugify(state.title) || 'quiz';
+  let slug = autoSlug
+    ? `${baseSlugCore}-${languageSuffix}`
+    : (state.slug || `${baseSlugCore}-${languageSuffix}`);
+
+  if(!slug) throw new Error('タイトルを入力してください。');
+
+  if(autoSlug){
+    slug = await findAvailableSlug(slug);
+  } else {
+    const existing = await supabaseRequest(`/rest/v1/quizzes?slug=eq.${encodeURIComponent(slug)}&select=id`, {method:'GET'});
+    if(Array.isArray(existing) && existing.length > 0) throw new Error('この slug はすでに存在します。別の slug にしてください。');
+  }
+
+  const payload = {
+    slug,
+    title: state.title,
+    description: state.description,
+    quiz_data: {
+      title: state.title,
+      description: state.description,
+      language,
+      shuffleQuestions: state.shuffleQuestions,
+      shuffleChoices: state.shuffleChoices,
+      questions: state.questions,
+    }
+  };
+
+  await supabaseRequest('/rest/v1/quizzes', {method:'POST', body: payload});
+  state.slug = slug;
+  const link = `${location.origin}${location.pathname}?quiz=${encodeURIComponent(slug)}`;
+  state.shareLink = link;
+  state.shareLinks[language] = link;
+}
+
+async function loadQuizFromSupabase(slug){
+  const data = await supabaseRequest(`/rest/v1/quizzes?slug=eq.${encodeURIComponent(slug)}&select=slug,title,description,quiz_data`);
+  if(!Array.isArray(data) || data.length === 0) throw new Error('指定されたクイズが見つかりませんでした。');
+  const row = data[0];
+  const qd = row.quiz_data || {};
+  state.mode = 'solver';
+  state.title = qd.title || row.title || 'Quiz';
+  state.description = qd.description || row.description || '';
+  state.slug = row.slug;
+  state.questions = Array.isArray(qd.questions) ? qd.questions : [];
+  state.shuffleQuestions = !!qd.shuffleQuestions;
+  state.shuffleChoices = !!qd.shuffleChoices;
+  resetRendered();
+}
+
+async function refreshQuizList(){
+  state.listStatus = '一覧を読み込み中です...';
+  render();
+  try{
+    const data = await supabaseRequest('/rest/v1/quizzes?select=slug,title,description,created_at&order=created_at.desc');
+    state.quizList = Array.isArray(data) ? data : [];
+    state.listStatus = `${state.quizList.length}件のクイズを読み込みました。`;
+    render();
+  }catch(e){
+    state.listStatus = e.message || '一覧の読み込みに失敗しました。';
+    render();
+  }
+}
+
+function getFilteredSortedQuizList(){
+  const needle = (state.listSearch || '').trim().toLowerCase();
+
+  let items = state.quizList.filter(item=>{
+    const meta = getQuizMeta(item.slug);
+    if(!state.showHidden && meta.hidden) return false;
+    if(!needle) return true;
+    const haystack = `${item.title || ''}
+${item.slug || ''}
+${item.description || ''}`.toLowerCase();
+    return haystack.includes(needle);
+  });
+
+  items.sort((a,b)=>{
+    if(state.listSort === 'created_asc'){
+      return new Date(a.created_at || 0) - new Date(b.created_at || 0);
+    }
+    if(state.listSort === 'title_asc'){
+      return String(a.title || '').localeCompare(String(b.title || ''), 'ja');
+    }
+    if(state.listSort === 'title_desc'){
+      return String(b.title || '').localeCompare(String(a.title || ''), 'ja');
+    }
+    return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+  });
+
+  return items;
+}
+
+function listRowsHtml(){
+  if(!state.quizList.length){
+    return `<div class="alert info">まだクイズがありません。最初の1件を保存するとここに並びます。</div>`;
+  }
+
+  const items = getFilteredSortedQuizList();
+
+  if(!items.length){
+    return `<div class="alert info">条件に合うクイズがありません。検索条件や非表示フィルターを調整してください。</div>`;
+  }
+
+  return `
+    <div class="list-head">
+      <div>Title</div>
+      <div>Slug</div>
+      <div>Created</div>
+      <div>Actions</div>
+    </div>
+    ${items.map(item=>{
+      const link = `${location.origin}${location.pathname}?quiz=${encodeURIComponent(item.slug)}`;
+      const created = item.created_at ? new Date(item.created_at).toLocaleString('ja-JP') : '';
+      const meta = getQuizMeta(item.slug);
+      return `
+        <div class="list-row">
+          <div>
+            <div><strong>${escapeHtml(item.title || '(untitled)')}</strong></div>
+            ${item.description ? `<div class="small muted">${escapeHtml(item.description)}</div>` : ''}
+            <div style="margin-top:8px;">
+              ${meta.used ? `<span class="pill">出題済み</span>` : ''}
+              ${meta.hidden ? `<span class="pill">非表示</span>` : ''}
+            </div>
+          </div>
+          <div><span class="mono">${escapeHtml(item.slug || '')}</span></div>
+          <div class="small muted">${escapeHtml(created)}</div>
+          <div class="btns" style="margin-top:0;">
+            <a class="buttonlink ghost" href="${escapeHtml(link)}" target="_blank" rel="noreferrer">Open</a>
+            <button class="secondary copy-list-link" data-link="${escapeHtml(link)}">Copy</button>
+            <label class="small" style="display:flex;align-items:center;gap:6px;margin:0;">
+              <input type="checkbox" class="toggle-used" data-slug="${escapeHtml(item.slug || '')}" ${meta.used ? 'checked' : ''}>
+              出題済み
+            </label>
+            <label class="small" style="display:flex;align-items:center;gap:6px;margin:0;">
+              <input type="checkbox" class="toggle-hidden" data-slug="${escapeHtml(item.slug || '')}" ${meta.hidden ? 'checked' : ''}>
+              非表示
+            </label>
+          </div>
+        </div>`;
+    }).join('')}
+  `;
+}
+
+async function callGenerateQuizChunk(chunkText, questionCount, title, overrides={}){
+  const functionUrl = `${getSupabaseBaseUrl()}/functions/v1/generate_quiz`;
+
+  let res;
+  try{
+    res = await fetch(functionUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': state.supabaseKey,
+        'Authorization': 'Bearer ' + state.supabaseKey,
+      },
+      body: JSON.stringify({
+        sourceText: chunkText,
+        questionCount,
+        title,
+        systemPrompt: overrides.systemPrompt || state.systemPrompt,
+        promptTemplate: overrides.promptTemplate || state.promptTemplate,
+      }),
+    });
+  }catch(err){
+    throw new Error(`AI作問APIに接続できませんでした。Supabase URL、Edge Function、またはネットワークを確認してください。 (${functionUrl})`);
+  }
+
+  const json = await res.json().catch(()=> ({}));
+  if(!res.ok){
+    throw new Error(json.detail ? JSON.stringify(json.detail) : (json.error || `AI作問に失敗しました (${res.status})`));
+  }
+  return json;
+}
+
+async function generateQuizWithAI(){
+  const rawSourceText = state.sourceText.trim();
+  if(!rawSourceText) throw new Error('教科書本文を入力してください。');
+
+  if(state.questionCountMode === 'auto'){
+    applyAutoQuestionCount({ force: true });
+  }
+
+  const sourceText = preprocessSourceText(rawSourceText);
+  if(!sourceText) throw new Error('有効な本文が見つかりませんでした。参考文献や付帯情報ではない本文を入力してください。');
+
+  const removedChars = rawSourceText.length - sourceText.length;
+  if (removedChars > 0) {
+    state.aiStatus = `参考文献や付帯情報と思われる部分を自動除外しました。${removedChars}文字を除外して作問します...`;
+    render();
+  }
+
+  const useChunking = sourceText.length > 12000 || Number(state.questionCount) > 10;
+  let allQuestions = [];
+
+  if (!useChunking) {
+    const json = await callGenerateQuizChunk(
+      sourceText,
+      Number(state.questionCount || 10),
+      state.title || 'Generated Quiz'
+    );
+    allQuestions = (Array.isArray(json.questions) ? json.questions : []).map(q => ({ ...q, _sourceChunk: sourceText }));
+    state.aiStatus = 'AI作問が完了しました。レビューしてから保存できます。';
+  } else {
+    const chunks = splitSourceIntoChunks(sourceText, Number(state.questionCount || 10));
+    const allocations = allocateQuestions(Number(state.questionCount || 10), chunks);
+
+    state.aiStatus = `長文モードで分割生成しています... 0 / ${chunks.length}`;
+    render();
+
+    for (let i = 0; i < chunks.length; i++) {
+      const qCount = allocations[i];
+      state.aiStatus = `長文モードで分割生成しています... ${i + 1} / ${chunks.length}`;
+      render();
+
+      const json = await callGenerateQuizChunk(
+        chunks[i],
+        qCount,
+        `${state.title || 'Generated Quiz'} (part ${i + 1})`
+      );
+
+      const partQuestions = Array.isArray(json.questions) ? json.questions : [];
+      allQuestions.push(...partQuestions.map(q => ({ ...q, _sourceChunk: chunks[i] })));
+    }
+
+    allQuestions = allQuestions.slice(0, Number(state.questionCount || 10));
+    state.aiStatus = `長文モードでのAI作問が完了しました。${chunks.length}分割を結合しました。レビューしてから保存できます。`;
+  }
+
+  allQuestions = allQuestions.map((q, i) => ({ ...q, no: i + 1 }));
+
+  state.previewQuestions = allQuestions;
+  state.questions = [];
+  state.shareLink = '';
+  state.shareLinks = { en: '', ja: '' };
+  state.status = '生成された問題をレビューしてください。レビュー後に英語版URLと日本語版URLをそれぞれ作れます。';
+  state.reviewStatus = '';
+  state.reviewError = '';
+  clearReviewSelections();
+  state.generatedEnTsv = makeTsvEnFromQuestions(allQuestions);
+  state.generatedJaTsv = makeTsvJaFromQuestions(allQuestions);
+  state.aiError = '';
+  saveLocal();
+}
+
+async function regenerateSingleQuestion(no){
+  if(!state.previewQuestions.length) throw new Error('先にクイズを生成してください。');
+
+  const targetNo = Number(no);
+  if(!Number.isFinite(targetNo)) throw new Error('作り直す問題番号を認識できませんでした。');
+
+  const original = state.previewQuestions.find(q => Number(q.no) === targetNo);
+  if(!original) throw new Error('指定した問題が見つかりませんでした。');
+
+  const chunkText = original._sourceChunk || state.sourceText.trim();
+  const cleanedChunkText = preprocessSourceText(chunkText);
+  const keptQuestions = state.previewQuestions.filter(q => (q._sourceChunk || state.sourceText.trim()) === chunkText && Number(q.no) !== targetNo);
+  const promptTemplate = buildReplacementPromptTemplate([original], keptQuestions);
+
+  state.reviewBusyNo = targetNo;
+  state.reviewError = '';
+  state.reviewStatus = `Q${targetNo} を作り直しています...`;
+  render();
+
+  try{
+    const json = await callGenerateQuizChunk(
+      cleanedChunkText || chunkText,
+      1,
+      `${state.title || 'Generated Quiz'} revision`,
+      { promptTemplate }
+    );
+
+    const candidate = (Array.isArray(json.questions) ? json.questions[0] : null) || {};
+    const replacement = {
+      ...candidate,
+      no: original.no,
+      _sourceChunk: cleanedChunkText || chunkText,
+    };
+
+    state.previewQuestions = state.previewQuestions
+      .map(q => Number(q.no) === targetNo ? replacement : q)
+      .sort((a,b)=>a.no-b.no);
+
+    state.reviewUpdatedNos[String(targetNo)] = (state.reviewUpdatedNos[String(targetNo)] || 0) + 1;
+    state.generatedEnTsv = makeTsvEnFromQuestions(state.previewQuestions);
+    state.generatedJaTsv = makeTsvJaFromQuestions(state.previewQuestions);
+    state.reviewStatus = `Q${targetNo} を作り直しました。レビューを続けるか、英語版URLまたは日本語版URLを作成できます。`;
+    state.reviewError = '';
+    state.shareLink = '';
+    state.shareLinks = { en: '', ja: '' };
+  } finally {
+    state.reviewBusyNo = null;
+    render();
+  }
+}
+
+async function saveReviewedQuiz(language='en'){
+  if(!state.previewQuestions.length) throw new Error('先にクイズを生成してください。');
+
+  state.aiError = '';
+  state.error = '';
+  state.questions = buildQuizQuestionsForLanguage(state.previewQuestions, language);
+  state.status = `${language === 'ja' ? '日本語版' : 'English版'}の保存を準備しました。`;
+
+  state.status = `Supabaseへ${language === 'ja' ? '日本語版' : 'English版'}を保存中です...`;
+  render();
+
+  await saveQuizToSupabase({autoSlug: true, language});
+  await refreshQuizList();
+
+  state.status = `${language === 'ja' ? '日本語版' : 'English版'}のURLを作成しました。必要ならもう一方の言語も同じレビュー結果から保存できます。`;
+  saveLocal();
+  render();
+}
+
+function render(){
+  const app = document.getElementById('app');
+  const sourceMetrics = getQuestionCountMetrics(state.sourceText);
+  if(state.mode !== 'solver' && state.questionCountMode === 'auto'){
+    state.questionCount = sourceMetrics.recommended;
+  }
+
+  if(state.mode === 'solver'){
+    const answeredCount = Object.keys(state.answers).length;
+    const score = state.rendered.reduce((n,q)=> n + ((state.answers[q.id]||'')===q.displayCorrect ? 1 : 0), 0);
+    app.innerHTML = `
+      <div class="card">
+        <div class="topbar">
+          <div>
+            <h1>${escapeHtml(state.title)}</h1>
+            <p class="muted">${escapeHtml(state.description)}</p>
+            ${state.slug ? `<p class="small muted">slug: <span class="mono">${escapeHtml(state.slug)}</span></p>` : ''}
+          </div>
+          <div><span class="pill">${state.rendered.length} questions</span><span class="pill">${score} correct</span></div>
+        </div>
+        <div class="btns">
+          <button class="secondary" id="resetAnswersBtn">Reset answers</button>
+          <button class="secondary" id="reshuffleBtn">Reshuffle</button>
+        </div>
+        <div class="alert info" style="margin-top:12px;">選択肢を選ぶと、その問題のすぐ下に解答・解説が表示されます。現在の回答数: ${answeredCount}</div>
+      </div>
+      ${state.rendered.map((q, idx)=>{
+        const selected = state.answers[q.id] || '';
+        const hasAnswered = !!selected;
+        const isCorrect = selected === q.displayCorrect;
+        const isJapanese = q.language === 'ja';
+        return `
+          <div class="card question">
+            <h3>Q${idx+1}. ${escapeHtml(q.question)}</h3>
+            ${Object.entries(q.displayOptions).map(([key, text])=>{
+              let cls='option';
+              if(selected===key) cls+=' selected';
+              if(hasAnswered && q.displayCorrect===key) cls+=' correct';
+              if(hasAnswered && selected===key && q.displayCorrect!==key) cls+=' wrong';
+              return `<label class="${cls}"><input type="radio" name="q_${escapeHtml(q.id)}" value="${key}" ${selected===key?'checked':''}> <strong>${key}.</strong> ${escapeHtml(text)}</label>`;
+            }).join('')}
+            ${hasAnswered ? `<div class="feedback ${isCorrect ? 'correct':'incorrect'}">
+              <div><strong>${isCorrect ? (isJapanese ? '正解' : 'Correct') : (isJapanese ? '不正解' : 'Incorrect')}</strong>${isCorrect ? '' : ` ${isJapanese ? '・正答' : '· Correct answer'}: ${escapeHtml(q.displayCorrect)}`}</div>
+              ${q.explanation ? `<div style="margin-top:8px;"><strong>${isJapanese ? '解説' : 'Explanation'}</strong><div class="small">${escapeHtml(q.explanation)}</div></div>` : ''}
+              ${renderSavedChoiceExplanationBlock(q, isJapanese ? 'ja' : 'en')}
+              ${q.excerpt ? `<div style="margin-top:8px;"><strong>${isJapanese ? '根拠抜粋' : 'Supporting excerpt'}</strong><div class="small">${escapeHtml(q.excerpt)}</div></div>` : ''}
+            </div>` : ''}
+          </div>`;
+      }).join('')}
+    `;
+    document.getElementById('resetAnswersBtn').onclick = ()=>{ state.answers = {}; render(); };
+    document.getElementById('reshuffleBtn').onclick = ()=>{ resetRendered(); render(); };
+    state.rendered.forEach(q=>{
+      document.querySelectorAll(`input[name="q_${CSS.escape(q.id)}"]`).forEach(el=>{
+        el.addEventListener('change', e=>{ state.answers[q.id] = e.target.value; render(); });
+      });
+    });
+    return;
+  }
+
+  app.innerHTML = `
+    <div class="card">
+      <div class="topbar">
+        <div>
+          <h1>Quiz Builder</h1>
+          <p class="muted">教科書テキストからAIでクイズを作成し、レビューしてから保存し、共有リンクを発行します。</p>
+        </div>
+        <div><span class="pill">AI quiz flow</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>1. Quiz generation</h2>
+      <div class="row">
+        <div><label for="title">Quiz title</label><input id="title" type="text" value="${escapeHtml(state.title)}"></div>
+        <div><label for="description">Description</label><input id="description" type="text" value="${escapeHtml(state.description)}" placeholder="必要なら説明文を入れます"></div>
+      </div>
+
+      <div class="row" style="margin-top:14px;">
+        <div>
+          <label for="questionCount">Question count</label>
+          <input id="questionCount" type="number" min="1" max="20" value="${escapeHtml(String(state.questionCount))}">
+          <div id="questionCountHint" class="small muted" style="margin-top:6px;">${questionCountHintHtml(sourceMetrics)}</div>
+          <div id="questionCountModeHint" class="small muted" style="margin-top:4px;">${state.questionCountMode === 'auto' ? '本文量に応じた自動設定中です。必要なら手動で変更できます。' : '手動設定中です。「本文長から再計算」を押すと推奨値に戻せます。'}</div>
+          <div class="btns" style="margin-top:8px;">
+            <button class="secondary" id="recalcQuestionCountBtn" type="button">本文長から再計算</button>
+          </div>
+        </div>
+        <div class="alert info" style="align-self:end;">レビュー後、この同じ問題セットから英語版URLと日本語版URLを別々に作成できます。</div>
+      </div>
+
+      <div style="margin-top:14px;">
+        <label for="sourceText">Source textbook text</label>
+        <textarea id="sourceText" placeholder="ここに教科書本文を貼り付けます。">${escapeHtml(state.sourceText)}</textarea>
+      </div>
+
+      ${(state.questionCount > 10 || state.sourceText.length > 12000) ? `<div class="alert info" style="margin-top:12px;">問題数が多い、または本文が長い場合は、自動で分割生成モードになります。</div>` : ''}
+
+      <details class="promptbox">
+        <summary>Prompt settings</summary>
+        <p class="small muted">ここを編集すると今回のAI作問に使われます。</p>
+
+        <div style="margin-top:12px;">
+          <label for="systemPrompt">System prompt</label>
+          <textarea id="systemPrompt" style="min-height:120px;">${escapeHtml(state.systemPrompt)}</textarea>
+        </div>
+
+        <div style="margin-top:12px;">
+          <label for="promptTemplate">Prompt template</label>
+          <textarea id="promptTemplate" style="min-height:320px;">${escapeHtml(state.promptTemplate)}</textarea>
+        </div>
+
+        <div class="alert info" style="margin-top:12px;">
+          <div class="small">
+            <strong>使える置換タグ</strong><br>
+            <span class="mono">{{questionCount}}</span> と <span class="mono">{{sourceText}}</span> は実行時に置き換えられます。
+          </div>
+        </div>
+
+        <div class="btns">
+          <button class="secondary" id="resetPromptBtn">Reset prompt to defaults</button>
+        </div>
+      </details>
+
+      <div class="btns">
+        <button class="ghost" id="aiGenerateReviewBtn">AIで作問してレビュー</button>
+        <button class="secondary" id="clearBuilderBtn">Clear builder</button>
+      </div>
+
+      ${state.aiError ? `<div class="alert error" style="margin-top:12px;">${escapeHtml(state.aiError)}</div>` : ''}
+      ${state.error ? `<div class="alert error" style="margin-top:12px;">${escapeHtml(state.error)}</div>` : ''}
+      ${state.aiStatus ? `<div class="alert ok" style="margin-top:12px;">${escapeHtml(state.aiStatus)}</div>` : ''}
+      ${state.status ? `<div class="alert info" style="margin-top:12px;">${escapeHtml(state.status)}</div>` : ''}
+    </div>
+
+    <div class="card">
+      <div class="topbar">
+        <div>
+          <h2>2. Review generated quiz</h2>
+          <p class="muted">英語版と日本語版を並べて確認できます。解説に加えて各選択肢の説明も確認できます。違和感のある問題には、メモを書いてその問題だけ作り直せます。</p>
+        </div>
+        <div><span class="pill">${state.previewQuestions.length || 0} questions</span><span class="pill">${getUpdatedReviewCount()} updated</span></div>
+      </div>
+
+      ${!state.previewQuestions.length ? `<div class="alert info" style="margin-top:12px;">まず「AIで作問してレビュー」を押すと、ここに問題と解説、各選択肢の説明が表示されます。</div>` : `
+        ${state.reviewError ? `<div class="alert error section-spacer">${escapeHtml(state.reviewError)}</div>` : ''}
+        ${state.reviewStatus ? `<div class="alert ok section-spacer">${escapeHtml(state.reviewStatus)}</div>` : ''}
+        <div class="section-spacer">
+          ${state.previewQuestions.map(q=>{
+            const note = state.reviewNotes[String(q.no)] || '';
+            const updatedCount = state.reviewUpdatedNos[String(q.no)] || 0;
+            const isBusy = Number(state.reviewBusyNo) === Number(q.no);
+            return `
+              <div class="card question" style="margin-bottom:16px;${updatedCount ? ' border-color:#93c5fd; box-shadow:0 0 0 2px rgba(147,197,253,.2);' : ''}">
+                <div class="review-head">
+                  <div>
+                    <h3>Q${q.no}</h3>
+                    <div class="small muted">Correct answer: ${escapeHtml(q.correct || '')}</div>
+                  </div>
+                  <div>
+                    ${updatedCount ? `<span class="pill">updated${updatedCount > 1 ? ` ×${updatedCount}` : ''}</span>` : ''}
+                    ${isBusy ? `<span class="pill">regenerating...</span>` : ''}
+                  </div>
+                </div>
+                <div class="review-grid">
+                  <div class="review-panel">
+                    <h4>English</h4>
+                    <div><strong>Question</strong><div class="small" style="margin-top:6px;">${escapeHtml(q.question_en || '')}</div></div>
+                    <div style="margin-top:12px;">
+                      ${['A','B','C','D'].map(key=>`<div class="review-option ${q.correct===key ? 'correct' : ''}"><strong>${key}.</strong> ${escapeHtml(q[`option${key}_en`] || '')}</div>`).join('')}
+                    </div>
+                    ${q.explanation_en ? `<div style="margin-top:12px;"><strong>Explanation</strong><div class="small" style="margin-top:6px;">${escapeHtml(q.explanation_en)}</div></div>` : ''}
+                    ${renderPreviewChoiceExplanationBlock(q, 'en')}
+                  </div>
+                  <div class="review-panel">
+                    <h4>日本語</h4>
+                    <div><strong>問題</strong><div class="small" style="margin-top:6px;">${escapeHtml(q.question_ja || '')}</div></div>
+                    <div style="margin-top:12px;">
+                      ${['A','B','C','D'].map(key=>`<div class="review-option ${q.correct===key ? 'correct' : ''}"><strong>${key}.</strong> ${escapeHtml(q[`option${key}_ja`] || '')}</div>`).join('')}
+                    </div>
+                    ${q.explanation_ja ? `<div style="margin-top:12px;"><strong>解説</strong><div class="small" style="margin-top:6px;">${escapeHtml(q.explanation_ja)}</div></div>` : ''}
+                    ${renderPreviewChoiceExplanationBlock(q, 'ja')}
+                  </div>
+                </div>
+                ${q.excerpt ? `<div style="margin-top:12px;"><strong>Supporting excerpt</strong><div class="small" style="margin-top:6px;">${escapeHtml(q.excerpt)}</div></div>` : ''}
+                <div style="margin-top:12px;">
+                  <label for="reviewNote_${q.no}">作り直しメモ</label>
+                  <textarea class="review-note" id="reviewNote_${q.no}" data-no="${escapeHtml(String(q.no))}" placeholder="例: 問題文が曖昧、選択肢CとDが似すぎている、解説が本文と少しずれている、引用文献リストからは作問しない、など">${escapeHtml(note)}</textarea>
+                </div>
+                <div class="btns" style="margin-top:12px;">
+                  <button class="regenerate-one-btn" data-no="${escapeHtml(String(q.no))}" ${state.reviewBusyNo !== null ? 'disabled' : ''}>${isBusy ? '作り直し中...' : 'この問題を作り直す'}</button>
+                </div>
+              </div>`;
+          }).join('')}
+        </div>
+      `}
+    </div>
+
+    <div class="card">
+      <h2>3. Answer page settings and save</h2>
+      <div class="switches">
+        <label class="switchrow"><span><strong>Shuffle question order</strong><br><span class="muted small">回答ページ表示時の問題順をランダム化します。</span></span><input id="shuffleQ" type="checkbox" ${state.shuffleQuestions ? 'checked' : ''}></label>
+        <label class="switchrow"><span><strong>Shuffle choice order</strong><br><span class="muted small">選択肢順をランダム化し、正答も追従させます。</span></span><input id="shuffleC" type="checkbox" ${state.shuffleChoices ? 'checked' : ''}></label>
+      </div>
+
+      <div class="alert info" style="margin-top:12px;">レビュー済みの同じ問題セットから、英語版URLと日本語版URLをそれぞれ保存できます。slug はタイトルから自動生成され、英語版は -en、日本語版は -ja を付けて保存します。重複時は連番が付きます。</div>
+
+      <div class="btns">
+        <button id="saveReviewedQuizEnBtn" ${state.previewQuestions.length && !state.shareLinks.en ? '' : 'disabled'}>英語版URLを作る</button>
+        <button id="saveReviewedQuizJaBtn" ${state.previewQuestions.length && !state.shareLinks.ja ? '' : 'disabled'}>日本語版URLを作る</button>
+      </div>
+
+      ${state.shareLinks.en || state.shareLinks.ja ? `<div style="margin-top:12px;">
+        ${state.shareLinks.en ? `<div style="margin-top:12px;">
+          <label for="shareLinkEn">English share link</label>
+          <input id="shareLinkEn" type="text" readonly value="${escapeHtml(state.shareLinks.en)}">
+          <div class="btns">
+            <button class="copy-share-link" data-link="${escapeHtml(state.shareLinks.en)}">Copy English link</button>
+            <a class="buttonlink ghost" href="${escapeHtml(state.shareLinks.en)}" target="_blank" rel="noreferrer">Open English page</a>
+          </div>
+        </div>` : ''}
+        ${state.shareLinks.ja ? `<div style="margin-top:12px;">
+          <label for="shareLinkJa">Japanese share link</label>
+          <input id="shareLinkJa" type="text" readonly value="${escapeHtml(state.shareLinks.ja)}">
+          <div class="btns">
+            <button class="copy-share-link" data-link="${escapeHtml(state.shareLinks.ja)}">Copy Japanese link</button>
+            <a class="buttonlink ghost" href="${escapeHtml(state.shareLinks.ja)}" target="_blank" rel="noreferrer">Open Japanese page</a>
+          </div>
+        </div>` : ''}
+      </div>` : ''}
+    </div>
+
+    <div class="card">
+      <div class="topbar">
+        <div>
+          <h2>4. Saved quizzes</h2>
+          <p class="muted">検索、並べ替え、出題済み管理、非表示管理ができます。</p>
+        </div>
+        <div class="btns" style="margin-top:0;">
+          <button class="secondary" id="refreshListBtn">Refresh list</button>
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:12px;">
+        <div>
+          <label for="listSearch">Search</label>
+          <input id="listSearch" type="text" value="${escapeHtml(state.listSearch)}" placeholder="タイトル / slug / 説明で検索">
+        </div>
+        <div>
+          <label for="listSort">Sort</label>
+          <select id="listSort">
+            <option value="created_desc" ${state.listSort === 'created_desc' ? 'selected' : ''}>作成日が新しい順</option>
+            <option value="created_asc" ${state.listSort === 'created_asc' ? 'selected' : ''}>作成日が古い順</option>
+            <option value="title_asc" ${state.listSort === 'title_asc' ? 'selected' : ''}>タイトル昇順</option>
+            <option value="title_desc" ${state.listSort === 'title_desc' ? 'selected' : ''}>タイトル降順</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="btns">
+        <label class="small" style="display:flex;align-items:center;gap:8px;margin:0;">
+          <input id="showHidden" type="checkbox" ${state.showHidden ? 'checked' : ''}>
+          非表示のクイズも表示する
+        </label>
+      </div>
+
+      <div class="alert info" style="margin-top:12px;">出題済みと非表示の状態は、このブラウザの localStorage に保存されます。</div>
+      ${state.listStatus ? `<div class="alert info" style="margin-top:12px;">${escapeHtml(state.listStatus)}</div>` : ''}
+      <div style="margin-top:12px;">${listRowsHtml()}</div>
+    </div>
+  `;
+
+  ['title','description','systemPrompt','promptTemplate','listSearch'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(!el) return;
+    el.addEventListener('input', e=>{
+      state[id] = e.target.value;
+      saveLocal();
+      if(id === 'listSearch') render();
+    });
+  });
+
+  document.getElementById('questionCount').addEventListener('input', e=>{
+    state.questionCount = clampNumber(Number(e.target.value || 10), 1, 20);
+    state.questionCountMode = 'manual';
+    saveLocal();
+    render();
+  });
+
+  document.getElementById('recalcQuestionCountBtn').onclick = ()=>{
+    state.questionCountMode = 'auto';
+    applyAutoQuestionCount({ force: true });
+    saveLocal();
+    render();
+  };
+
+  document.getElementById('listSort').addEventListener('change', e=>{
+    state.listSort = e.target.value;
+    saveLocal();
+    render();
+  });
+
+  document.getElementById('showHidden').addEventListener('change', e=>{
+    state.showHidden = e.target.checked;
+    saveLocal();
+    render();
+  });
+
+  const sourceTextEl = document.getElementById('sourceText');
+  if(sourceTextEl){
+    sourceTextEl.addEventListener('input', e=>{
+      state.sourceText = e.target.value;
+      applyAutoQuestionCount({ syncDom: true });
+      saveLocal();
+    });
+    sourceTextEl.addEventListener('change', ()=>{
+      render();
+    });
+  }
+
+  document.getElementById('shuffleQ').addEventListener('change', e=>{ state.shuffleQuestions = e.target.checked; saveLocal(); });
+  document.getElementById('shuffleC').addEventListener('change', e=>{ state.shuffleChoices = e.target.checked; saveLocal(); });
+
+  document.getElementById('resetPromptBtn').onclick = ()=>{
+    state.systemPrompt = DEFAULT_SYSTEM_PROMPT;
+    state.promptTemplate = DEFAULT_PROMPT_TEMPLATE;
+    state.promptMode = 'default';
+    state.aiStatus = 'プロンプトを初期設定に戻しました。';
+    state.aiError = '';
+    saveLocal();
+    render();
+  };
+
+  document.getElementById('clearBuilderBtn').onclick = ()=>{
+    clearBuilderVolatileState();
+    saveLocal();
+    render();
+  };
+
+  document.getElementById('aiGenerateReviewBtn').onclick = async ()=>{
+    try{
+      state.aiError = '';
+      state.error = '';
+      state.shareLink = '';
+      state.shareLinks = { en: '', ja: '' };
+      state.aiStatus = 'AIで作問中です...';
+      state.reviewStatus = '';
+      state.reviewError = '';
+      render();
+      await generateQuizWithAI();
+      render();
+    }catch(e){
+      state.aiStatus = '';
+      state.aiError = e.message || 'AI作問に失敗しました。';
+      render();
+    }
+  };
+
+  const saveReviewedQuizEnBtn = document.getElementById('saveReviewedQuizEnBtn');
+  if(saveReviewedQuizEnBtn){
+    saveReviewedQuizEnBtn.onclick = async ()=>{
+      try{
+        await saveReviewedQuiz('en');
+      }catch(e){
+        state.status = '';
+        state.error = e.message || 'English版の保存に失敗しました。';
+        render();
+      }
+    };
+  }
+
+  const saveReviewedQuizJaBtn = document.getElementById('saveReviewedQuizJaBtn');
+  if(saveReviewedQuizJaBtn){
+    saveReviewedQuizJaBtn.onclick = async ()=>{
+      try{
+        await saveReviewedQuiz('ja');
+      }catch(e){
+        state.status = '';
+        state.error = e.message || '日本語版の保存に失敗しました。';
+        render();
+      }
+    };
+  }
+
+  document.querySelectorAll('.regenerate-one-btn').forEach(btn=>{
+    btn.onclick = async ()=>{
+      try{
+        const no = Number(btn.dataset.no || '');
+        await regenerateSingleQuestion(no);
+      }catch(e){
+        state.reviewStatus = '';
+        state.reviewError = e.message || '問題の作り直しに失敗しました。';
+        state.reviewBusyNo = null;
+        render();
+      }
+    };
+  });
+
+  document.querySelectorAll('.review-note').forEach(el=>{
+    el.addEventListener('input', e=>{
+      state.reviewNotes[e.target.dataset.no || ''] = e.target.value;
+    });
+  });
+
+  document.getElementById('refreshListBtn').onclick = refreshQuizList;
+
+  document.querySelectorAll('.copy-list-link').forEach(btn=>{
+    btn.onclick = async ()=>{
+      try{
+        await navigator.clipboard.writeText(btn.dataset.link || '');
+        const original = btn.textContent;
+        btn.textContent = 'Copied';
+        setTimeout(()=> btn.textContent = original, 1200);
+      }catch(e){}
+    };
+  });
+
+  document.querySelectorAll('.toggle-used').forEach(el=>{
+    el.addEventListener('change', e=>{
+      setQuizMeta(e.target.dataset.slug || '', { used: e.target.checked });
+      render();
+    });
+  });
+
+  document.querySelectorAll('.toggle-hidden').forEach(el=>{
+    el.addEventListener('change', e=>{
+      setQuizMeta(e.target.dataset.slug || '', { hidden: e.target.checked });
+      render();
+    });
+  });
+
+  document.querySelectorAll('.copy-share-link').forEach(btn=>{
+    btn.onclick = async ()=>{
+      try{
+        await navigator.clipboard.writeText(btn.dataset.link || '');
+        const original = btn.textContent;
+        btn.textContent = 'Copied';
+        setTimeout(()=> btn.textContent = original, 1400);
+      }catch(e){}
+    };
+  });
+
+}
+
+(async function init(){
+  loadLocal();
+  loadQuizMeta();
+  const quizSlug = getSlugFromQuery();
+  if(quizSlug){
+    try{
+      state.mode = 'solver';
+      await loadQuizFromSupabase(quizSlug);
+    }catch(e){
+      state.mode = 'builder';
+      clearBuilderVolatileState();
+      state.error = e.message || 'クイズの読み込みに失敗しました。';
+      try{ await refreshQuizList(); }catch(_){}
+    }
+  }else{
+    state.mode = 'builder';
+    clearBuilderVolatileState();
+    try{ await refreshQuizList(); }catch(_){}
+  }
+  render();
+})();
+</script>
+</body>
+</html>
