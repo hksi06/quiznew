@@ -500,6 +500,7 @@ const state = {
   reviewError: '',
   authReady: false,
   authUser: null,
+  authAccessToken: '',
   authEmail: '',
   authStatus: '',
   authError: '',
@@ -536,8 +537,14 @@ async function getBuilderSession(){
 }
 
 async function getBuilderAccessToken(){
+  if(state.authAccessToken) return state.authAccessToken;
   const session = await getBuilderSession();
-  return session?.access_token || '';
+  state.authAccessToken = session?.access_token || '';
+  if(session?.user){
+    state.authUser = session.user;
+    if(session.user.email) state.authEmail = session.user.email;
+  }
+  return state.authAccessToken;
 }
 
 async function syncBuilderAuthState(){
@@ -545,10 +552,12 @@ async function syncBuilderAuthState(){
   try{
     const session = await getBuilderSession();
     state.authUser = session?.user || null;
-    if(state.authUser?.email) state.authEmail = state.authUser.email;
+    state.authAccessToken = session?.access_token || '';
+    state.authEmail = state.authUser?.email || state.authEmail || '';
     state.authError = '';
   }catch(err){
     state.authUser = null;
+    state.authAccessToken = '';
     state.authError = err?.message || 'ログイン状態の確認に失敗しました。';
   }
   state.authReady = true;
@@ -557,22 +566,29 @@ async function syncBuilderAuthState(){
 function attachBuilderAuthListener(){
   if(authListenerAttached || state.mode === 'solver') return;
   const supabase = getBrowserSupabaseClient();
-  supabase.auth.onAuthStateChange(async (_event, session)=>{
+  supabase.auth.onAuthStateChange((_event, session)=>{
     state.authUser = session?.user || null;
+    state.authAccessToken = session?.access_token || '';
     if(state.authUser?.email) state.authEmail = state.authUser.email;
     state.authReady = true;
     state.authError = '';
-    if(state.mode === 'builder' && state.authUser){
-      try{
-        await refreshQuizList();
-      }catch(e){
-        state.listStatus = e.message || '一覧の読み込みに失敗しました。';
+
+    setTimeout(async ()=>{
+      if(state.mode === 'builder' && state.authUser){
+        try{
+          await refreshQuizList();
+        }catch(e){
+          state.listStatus = e.message || '一覧の読み込みに失敗しました。';
+          render();
+        }
+      }else if(state.mode === 'builder'){
+        state.quizList = [];
+        state.listStatus = '';
+        render();
+      }else{
+        render();
       }
-    }else if(state.mode === 'builder'){
-      state.quizList = [];
-      state.listStatus = '';
-    }
-    render();
+    }, 0);
   });
   authListenerAttached = true;
 }
@@ -603,6 +619,8 @@ async function signOutBuilder(){
 
   state.authStatus = '';
   state.authError = '';
+  state.authUser = null;
+  state.authAccessToken = '';
   state.quizList = [];
   state.listStatus = '';
   clearBuilderVolatileState();
