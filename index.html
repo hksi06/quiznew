@@ -1008,6 +1008,38 @@ ${item.description || ''}`.toLowerCase();
   return items;
 }
 
+function buildQuizPublicLink(slug){
+  return `${location.origin}${location.pathname}?quiz=${encodeURIComponent(slug || '')}`;
+}
+
+function normalizeClipboardCell(value){
+  return String(value || '').replace(/\t/g, ' ').replace(/\r?\n+/g, ' / ').trim();
+}
+
+function buildVisibleQuizListTsv(){
+  const items = getFilteredSortedQuizList().filter(item=>{
+    const meta = getQuizMeta(item.slug);
+    return !meta.hidden;
+  });
+  const header = ['title', 'description', 'url'];
+  const rows = items.map(item=>[
+    normalizeClipboardCell(item.title || ''),
+    normalizeClipboardCell(item.description || ''),
+    buildQuizPublicLink(item.slug || ''),
+  ]);
+  return [header, ...rows].map(cols=>cols.join('\t')).join('\n');
+}
+
+function buildSingleQuizCopyText(slug){
+  const item = state.quizList.find(x=>x.slug === slug);
+  if(!item) return '';
+  return [
+    `Title: ${item.title || ''}`,
+    `Description: ${item.description || ''}`,
+    `URL: ${buildQuizPublicLink(item.slug || '')}`,
+  ].join('\n');
+}
+
 function listRowsHtml(){
   if(!state.quizList.length){
     return `<div class="alert info">まだクイズがありません。最初の1件を保存するとここに並びます。</div>`;
@@ -1027,7 +1059,7 @@ function listRowsHtml(){
       <div>Actions</div>
     </div>
     ${items.map(item=>{
-      const link = `${location.origin}${location.pathname}?quiz=${encodeURIComponent(item.slug)}`;
+      const link = buildQuizPublicLink(item.slug);
       const created = item.created_at ? new Date(item.created_at).toLocaleString('ja-JP') : '';
       const meta = getQuizMeta(item.slug);
       return `
@@ -1044,7 +1076,8 @@ function listRowsHtml(){
           <div class="small muted">${escapeHtml(created)}</div>
           <div class="btns" style="margin-top:0;">
             <a class="buttonlink ghost" href="${escapeHtml(link)}" target="_blank" rel="noreferrer">Open</a>
-            <button class="secondary copy-list-link" data-link="${escapeHtml(link)}">Copy</button>
+            <button class="secondary copy-list-link" data-link="${escapeHtml(link)}">Copy link</button>
+            <button class="secondary copy-quiz-details-btn" data-slug="${escapeHtml(item.slug || '')}">Copy details</button>
             <label class="small" style="display:flex;align-items:center;gap:6px;margin:0;">
               <input type="checkbox" class="toggle-used" data-slug="${escapeHtml(item.slug || '')}" ${meta.used ? 'checked' : ''}>
               出題済み
@@ -1537,6 +1570,7 @@ function render(){
           <p class="muted">検索、並べ替え、出題済み管理、非表示管理ができます。</p>
         </div>
         <div class="btns" style="margin-top:0;">
+          <button class="secondary" id="copyVisibleListBtn">Copy visible list</button>
           <button class="secondary" id="refreshListBtn">Refresh list</button>
         </div>
       </div>
@@ -1564,6 +1598,7 @@ function render(){
         </label>
       </div>
 
+      <div class="alert info" style="margin-top:12px;">Copy visible list は、現在の検索・並べ替えを反映しつつ、非表示のクイズを除いた title / description / url のTSV形式でコピーします。各行の Copy details は、そのクイズ1件分のタイトル・説明・URLをコピーします。</div>
       <div class="alert info" style="margin-top:12px;">出題済みと非表示の状態は、このブラウザの localStorage に保存されます。</div>
       ${state.listStatus ? `<div class="alert info" style="margin-top:12px;">${escapeHtml(state.listStatus)}</div>` : ''}
       <div style="margin-top:12px;">${listRowsHtml()}</div>
@@ -1717,10 +1752,36 @@ function render(){
 
   document.getElementById('refreshListBtn').onclick = refreshQuizList;
 
+  const copyVisibleListBtn = document.getElementById('copyVisibleListBtn');
+  if(copyVisibleListBtn){
+    copyVisibleListBtn.onclick = async ()=>{
+      try{
+        const text = buildVisibleQuizListTsv();
+        await navigator.clipboard.writeText(text);
+        const original = copyVisibleListBtn.textContent;
+        copyVisibleListBtn.textContent = 'Copied';
+        setTimeout(()=> copyVisibleListBtn.textContent = original, 1200);
+      }catch(e){}
+    };
+  }
+
   document.querySelectorAll('.copy-list-link').forEach(btn=>{
     btn.onclick = async ()=>{
       try{
         await navigator.clipboard.writeText(btn.dataset.link || '');
+        const original = btn.textContent;
+        btn.textContent = 'Copied';
+        setTimeout(()=> btn.textContent = original, 1200);
+      }catch(e){}
+    };
+  });
+
+  document.querySelectorAll('.copy-quiz-details-btn').forEach(btn=>{
+    btn.onclick = async ()=>{
+      try{
+        const text = buildSingleQuizCopyText(btn.dataset.slug || '');
+        if(!text) return;
+        await navigator.clipboard.writeText(text);
         const original = btn.textContent;
         btn.textContent = 'Copied';
         setTimeout(()=> btn.textContent = original, 1200);
