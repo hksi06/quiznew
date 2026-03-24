@@ -88,7 +88,7 @@ const PROMPT_DEFAULTS_VERSION = 1;
 const SAMPLE_TSV = `No\tQuestion\tOption A\tOption B\tOption C\tOption D\tCorrect Answer\tExplanation\tSupporting Excerpt
 1\tWhich statement about an ideal renal biomarker is appropriate?\tIt should show wide biologic variability and partial protein binding.\tIt should be easy to measure and cost-effective.\tIt should undergo substantial non-renal metabolism.\tIt should be secreted and reabsorbed by the tubules.\tB\tThe chapter lists easy measurability and cost-effectiveness among the ideal properties of a renal biomarker.\tThe ideal properties of a renal biomarker include ... easy measurability, and cost-effectiveness.`;
 
-const DEFAULT_SYSTEM_PROMPT = `You create high-quality bilingual veterinary textbook quizzes and follow the requested output schema exactly. Questions must read like standalone exam items that test general knowledge derived from the source, not like reading-comprehension questions about a specific chapter, text, passage, excerpt, or textbook. Distractors must be subtle, plausible, and parallel to the correct answer rather than obviously wrong, absurd, or from an unrelated domain.`;
+const DEFAULT_SYSTEM_PROMPT = `You create high-quality bilingual veterinary textbook quizzes and concise quiz metadata, and follow the requested output schema exactly. Questions must read like standalone exam items that test general knowledge derived from the source, not like reading-comprehension questions about a specific chapter, text, passage, excerpt, or textbook. Distractors must be subtle, plausible, and parallel to the correct answer rather than obviously wrong, absurd, or from an unrelated domain.`;
 
 const DEFAULT_PROMPT_TEMPLATE = `You are creating bilingual multiple-choice quiz questions from a textbook excerpt.
 
@@ -98,6 +98,10 @@ Follow these rules strictly:
 - Create exactly {{questionCount}} four-option multiple-choice questions.
 - Output both English and Japanese versions for each question.
 - Use natural Japanese.
+- Also generate quiz metadata:
+  - title: a concise English quiz title, ideally 3-12 words, focused on the medical topic.
+  - description: a concise one-line bilingual summary written as "English / 日本語".
+- The title and description must not mention the chapter, text, textbook, excerpt, passage, source text, 本文, 抜粋文, この章, このチャプター, この教科書, このテキスト, or reading-comprehension framing.
 - The question stem should ask what is correct/appropriate, not "which matches the text".
 - Questions must read like standalone exam items, not like reading-comprehension questions about a chapter or passage.
 - Never mention the chapter, text, textbook, excerpt, passage, source text, 本文, 抜粋文, この章, このチャプター, この教科書, or このテキスト in the question stem or explanation.
@@ -126,6 +130,7 @@ Follow these rules strictly:
 ・4つの選択肢は、同じ話題・同じ粒度・近い長さでそろえてください。
 ・onlyやexclusivelyなどの正誤がわかりやすい表現は避けてください。
 ・引用文献リスト、参考文献、著者情報、謝辞、client information などから作問しないでください。
+・title は簡潔な英語題名、description は "English / 日本語" 形式の1行要約にしてください。
 
 Source text:
 """{{sourceText}}"""`;
@@ -134,6 +139,13 @@ function escapeHtml(s=''){ return s.replace(/[&<>"']/g, ch => ({'&':'&amp;','<':
 function norm(s=''){ return s.toLowerCase().replace(/[\s_\-・（）()]/g,'').replace(/：/g,'').trim(); }
 function slugify(s=''){
   return s.toLowerCase().normalize('NFKD').replace(/[^\w\s-]/g,'').trim().replace(/\s+/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'').slice(0,80);
+}
+function cleanGeneratedMetadataText(s=''){
+  return String(s || '').replace(/\s+/g,' ').trim();
+}
+function applyGeneratedMetadata(meta, fallbackTitle='Generated Quiz'){
+  state.title = cleanGeneratedMetadataText(meta?.title || '') || fallbackTitle;
+  state.description = cleanGeneratedMetadataText(meta?.description || '');
 }
 function shuffleArray(arr){
   const a = arr.slice();
@@ -460,7 +472,7 @@ function applyAutoQuestionCount({ force=false, syncDom=false }={}){
 
 const state = {
   mode: 'builder',
-  title: 'Chapter Quiz',
+  title: '',
   description: '',
   slug: '',
   tsv: '',
@@ -627,7 +639,7 @@ async function signOutBuilder(){
 }
 
 function clearBuilderVolatileState(){
-  state.title = 'Chapter Quiz';
+  state.title = '';
   state.description = '';
   state.slug = '';
   state.tsv = '';
@@ -1110,6 +1122,7 @@ async function callGenerateQuizChunk(chunkText, questionCount, title, overrides=
         sourceText: chunkText,
         questionCount,
         title,
+        metadataOnly: !!overrides.metadataOnly,
         systemPrompt: overrides.systemPrompt || state.systemPrompt,
         promptTemplate: overrides.promptTemplate || state.promptTemplate,
       }),
@@ -1123,6 +1136,10 @@ async function callGenerateQuizChunk(chunkText, questionCount, title, overrides=
     throw new Error(json.detail ? JSON.stringify(json.detail) : (json.error || `AI作問に失敗しました (${res.status})`));
   }
   return json;
+}
+
+async function callGenerateQuizMetadata(sourceText){
+  return callGenerateQuizChunk(sourceText, 1, 'Generated Quiz', { metadataOnly: true });
 }
 
 async function generateQuizWithAI(){
@@ -1145,17 +1162,27 @@ async function generateQuizWithAI(){
   const useChunking = sourceText.length > 12000 || Number(state.questionCount) > 10;
   let allQuestions = [];
 
+  state.title = '';
+  state.description = '';
+  render();
+
   if (!useChunking) {
     const json = await callGenerateQuizChunk(
       sourceText,
       Number(state.questionCount || 10),
-      state.title || 'Generated Quiz'
+      'Generated Quiz'
     );
+    applyGeneratedMetadata(json);
     allQuestions = (Array.isArray(json.questions) ? json.questions : []).map(q => ({ ...q, _sourceChunk: sourceText }));
-    state.aiStatus = 'AI作問が完了しました。レビューしてから保存できます。';
+    state.aiStatus = 'AI作問が完了しました。タイトル・説明も本文から自動生成しました。レビューしてから保存できます。';
   } else {
     const chunks = splitSourceIntoChunks(sourceText, Number(state.questionCount || 10));
     const allocations = allocateQuestions(Number(state.questionCount || 10), chunks);
+
+    state.aiStatus = '本文からタイトルと説明を生成しています...';
+    render();
+    const metadata = await callGenerateQuizMetadata(sourceText);
+    applyGeneratedMetadata(metadata);
 
     state.aiStatus = `長文モードで分割生成しています... 0 / ${chunks.length}`;
     render();
@@ -1176,7 +1203,7 @@ async function generateQuizWithAI(){
     }
 
     allQuestions = allQuestions.slice(0, Number(state.questionCount || 10));
-    state.aiStatus = `長文モードでのAI作問が完了しました。${chunks.length}分割を結合しました。レビューしてから保存できます。`;
+    state.aiStatus = `長文モードでのAI作問が完了しました。${chunks.length}分割を結合し、タイトル・説明も本文から自動生成しました。レビューしてから保存できます。`;
   }
 
   allQuestions = allQuestions.map((q, i) => ({ ...q, no: i + 1 }));
@@ -1405,9 +1432,16 @@ function render(){
     <div class="card">
       <h2>1. Quiz generation</h2>
       <div class="row">
-        <div><label for="title">Quiz title</label><input id="title" type="text" value="${escapeHtml(state.title)}"></div>
-        <div><label for="description">Description</label><input id="description" type="text" value="${escapeHtml(state.description)}" placeholder="必要なら説明文を入れます"></div>
+        <div>
+          <label>Generated title</label>
+          <div class="alert">${state.title ? escapeHtml(state.title) : '<span class="muted">AI作問時に本文から自動生成されます。</span>'}</div>
+        </div>
+        <div>
+          <label>Generated description</label>
+          <div class="alert">${state.description ? escapeHtml(state.description) : '<span class="muted">AI作問時に本文から自動生成されます。</span>'}</div>
+        </div>
       </div>
+      <div class="small muted" style="margin-top:8px;">title / description は本文から自動生成されます。個別編集UIは入れていません。</div>
 
       <div class="row" style="margin-top:14px;">
         <div>
@@ -1618,7 +1652,7 @@ function render(){
     };
   }
 
-  ['title','description','systemPrompt','promptTemplate','listSearch'].forEach(id=>{
+  ['systemPrompt','promptTemplate','listSearch'].forEach(id=>{
     const el = document.getElementById(id);
     if(!el) return;
     el.addEventListener('input', e=>{
