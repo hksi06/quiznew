@@ -68,6 +68,7 @@
     .review-option{padding:8px 10px;border:1px solid var(--line);border-radius:12px;background:#fff;margin-top:8px}
     .review-option.correct{border-color:#86efac;background:#f0fdf4}
     .review-note{min-height:96px}
+    .review-addendum{min-height:84px}
     .section-spacer{margin-top:16px}
     @media (max-width:900px){
       .list-head{display:none}
@@ -169,6 +170,19 @@ function applyGeneratedMetadata(meta, fallbackTitle='Generated Quiz'){
   state.title = normalizeGeneratedTitle(meta?.title || '', fallbackTitle);
   state.description = normalizeGeneratedDescription(meta?.description || '', state.title);
 }
+function mergeExplanationText(base='', addendum=''){
+  const baseText = String(base || '').trim();
+  const addendumText = String(addendum || '').trim();
+  if(baseText && addendumText) return `${baseText}\n\n${addendumText}`;
+  return baseText || addendumText;
+}
+function getPreviewExplanationAddendum(q, language='en'){
+  return language === 'ja' ? (q.explanation_addendum_ja || '') : (q.explanation_addendum_en || '');
+}
+function getPreviewExplanationText(q, language='en'){
+  const base = language === 'ja' ? (q.explanation_ja || '') : (q.explanation_en || '');
+  return mergeExplanationText(base, getPreviewExplanationAddendum(q, language));
+}
 function shuffleArray(arr){
   const a = arr.slice();
   for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
@@ -251,7 +265,7 @@ function makeTsvEnFromQuestions(questions){
       q.optionC_en || "",
       q.optionD_en || "",
       q.correct || "",
-      q.explanation_en || "",
+      mergeExplanationText(q.explanation_en || "", q.explanation_addendum_en || ""),
       q.optionA_explanation_en || "",
       q.optionB_explanation_en || "",
       q.optionC_explanation_en || "",
@@ -276,7 +290,7 @@ function makeTsvJaFromQuestions(questions){
       q.optionC_ja || "",
       q.optionD_ja || "",
       q.correct || "",
-      q.explanation_ja || "",
+      mergeExplanationText(q.explanation_ja || "", q.explanation_addendum_ja || ""),
       q.optionA_explanation_ja || "",
       q.optionB_explanation_ja || "",
       q.optionC_explanation_ja || "",
@@ -942,7 +956,7 @@ function buildQuizQuestionsForLanguage(sourceQuestions, language='en'){
       D: language === 'ja' ? (q.optionD_ja || '') : (q.optionD_en || ''),
     },
     correct: q.correct || 'A',
-    explanation: language === 'ja' ? (q.explanation_ja || '') : (q.explanation_en || ''),
+    explanation: language === 'ja' ? mergeExplanationText(q.explanation_ja || '', q.explanation_addendum_ja || '') : mergeExplanationText(q.explanation_en || '', q.explanation_addendum_en || ''),
     optionExplanations: {
       A: language === 'ja' ? (q.optionA_explanation_ja || '') : (q.optionA_explanation_en || ''),
       B: language === 'ja' ? (q.optionB_explanation_ja || '') : (q.optionB_explanation_en || ''),
@@ -1508,6 +1522,8 @@ async function regenerateSingleQuestion(no){
       ...candidate,
       no: original.no,
       _sourceChunk: cleanedChunkText || chunkText,
+      explanation_addendum_en: original.explanation_addendum_en || '',
+      explanation_addendum_ja: original.explanation_addendum_ja || '',
     };
 
     state.previewQuestions = state.previewQuestions
@@ -1652,7 +1668,7 @@ function render(){
             }).join('')}
             ${hasAnswered ? `<div class="feedback ${isCorrect ? 'correct':'incorrect'}">
               <div><strong>${isCorrect ? (isJapanese ? '正解' : 'Correct') : (isJapanese ? '不正解' : 'Incorrect')}</strong>${isCorrect ? '' : ` ${isJapanese ? '・正答' : '· Correct answer'}: ${escapeHtml(q.displayCorrect)}`}</div>
-              ${q.explanation ? `<div style="margin-top:8px;"><strong>${isJapanese ? '解説' : 'Explanation'}</strong><div class="small">${escapeHtml(q.explanation)}</div></div>` : ''}
+              ${q.explanation ? `<div style="margin-top:8px;"><strong>${isJapanese ? '解説' : 'Explanation'}</strong><div class="small" style="white-space:pre-wrap;">${escapeHtml(q.explanation)}</div></div>` : ''}
               ${renderSavedChoiceExplanationBlock(q, isJapanese ? 'ja' : 'en')}
               ${q.excerpt ? `<div style="margin-top:8px;"><strong>${isJapanese ? '根拠抜粋' : 'Supporting excerpt'}</strong><div class="small">${escapeHtml(q.excerpt)}</div></div>` : ''}
             </div>` : ''}
@@ -1793,8 +1809,12 @@ function render(){
                     <div style="margin-top:12px;">
                       ${['A','B','C','D'].map(key=>`<div class="review-option ${q.correct===key ? 'correct' : ''}"><strong>${key}.</strong> ${escapeHtml(q[`option${key}_en`] || '')}</div>`).join('')}
                     </div>
-                    ${q.explanation_en ? `<div style="margin-top:12px;"><strong>Explanation</strong><div class="small" style="margin-top:6px;">${escapeHtml(q.explanation_en)}</div></div>` : ''}
+                    ${getPreviewExplanationText(q, 'en') ? `<div style="margin-top:12px;"><strong>Explanation</strong><div class="small" style="margin-top:6px; white-space:pre-wrap;">${escapeHtml(getPreviewExplanationText(q, 'en'))}</div></div>` : ''}
                     ${renderPreviewChoiceExplanationBlock(q, 'en')}
+                    <div style="margin-top:12px;">
+                      <label for="explanationAddendumEn_${q.no}">Explanation addendum</label>
+                      <textarea class="review-addendum explanation-addendum-input" id="explanationAddendumEn_${q.no}" data-no="${escapeHtml(String(q.no))}" data-language="en" placeholder="Optional note to append to the English explanation when you save the quiz.">${escapeHtml(q.explanation_addendum_en || '')}</textarea>
+                    </div>
                   </div>
                   <div class="review-panel">
                     <h4>日本語</h4>
@@ -1802,8 +1822,12 @@ function render(){
                     <div style="margin-top:12px;">
                       ${['A','B','C','D'].map(key=>`<div class="review-option ${q.correct===key ? 'correct' : ''}"><strong>${key}.</strong> ${escapeHtml(q[`option${key}_ja`] || '')}</div>`).join('')}
                     </div>
-                    ${q.explanation_ja ? `<div style="margin-top:12px;"><strong>解説</strong><div class="small" style="margin-top:6px;">${escapeHtml(q.explanation_ja)}</div></div>` : ''}
+                    ${getPreviewExplanationText(q, 'ja') ? `<div style="margin-top:12px;"><strong>解説</strong><div class="small" style="margin-top:6px; white-space:pre-wrap;">${escapeHtml(getPreviewExplanationText(q, 'ja'))}</div></div>` : ''}
                     ${renderPreviewChoiceExplanationBlock(q, 'ja')}
+                    <div style="margin-top:12px;">
+                      <label for="explanationAddendumJa_${q.no}">解説への追記</label>
+                      <textarea class="review-addendum explanation-addendum-input" id="explanationAddendumJa_${q.no}" data-no="${escapeHtml(String(q.no))}" data-language="ja" placeholder="保存時に日本語の解説末尾へ追加したい注記を入力します。">${escapeHtml(q.explanation_addendum_ja || '')}</textarea>
+                    </div>
                   </div>
                 </div>
                 ${q.excerpt ? `<div style="margin-top:12px;"><strong>Supporting excerpt</strong><div class="small" style="margin-top:6px;">${escapeHtml(q.excerpt)}</div></div>` : ''}
@@ -2082,6 +2106,22 @@ function render(){
   document.querySelectorAll('.review-note').forEach(el=>{
     el.addEventListener('input', e=>{
       state.reviewNotes[e.target.dataset.no || ''] = e.target.value;
+      scheduleDraftSnapshotSave();
+    });
+  });
+
+  document.querySelectorAll('.explanation-addendum-input').forEach(el=>{
+    el.addEventListener('input', e=>{
+      const no = Number(e.target.dataset.no || '');
+      const language = e.target.dataset.language === 'ja' ? 'ja' : 'en';
+      const field = language === 'ja' ? 'explanation_addendum_ja' : 'explanation_addendum_en';
+      state.previewQuestions = (state.previewQuestions || []).map(q => Number(q.no) === no ? { ...q, [field]: e.target.value } : q);
+      state.generatedEnTsv = makeTsvEnFromQuestions(state.previewQuestions);
+      state.generatedJaTsv = makeTsvJaFromQuestions(state.previewQuestions);
+      state.status = '解説への追記を反映しました。レビューを続けて保存できます。';
+      state.error = '';
+      state.shareLink = '';
+      state.shareLinks = { en: '', ja: '' };
       scheduleDraftSnapshotSave();
     });
   });
