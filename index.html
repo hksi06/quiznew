@@ -88,7 +88,7 @@ const PROMPT_DEFAULTS_VERSION = 1;
 const SAMPLE_TSV = `No\tQuestion\tOption A\tOption B\tOption C\tOption D\tCorrect Answer\tExplanation\tSupporting Excerpt
 1\tWhich statement about an ideal renal biomarker is appropriate?\tIt should show wide biologic variability and partial protein binding.\tIt should be easy to measure and cost-effective.\tIt should undergo substantial non-renal metabolism.\tIt should be secreted and reabsorbed by the tubules.\tB\tThe chapter lists easy measurability and cost-effectiveness among the ideal properties of a renal biomarker.\tThe ideal properties of a renal biomarker include ... easy measurability, and cost-effectiveness.`;
 
-const DEFAULT_SYSTEM_PROMPT = `You create high-quality bilingual veterinary textbook quizzes and concise quiz metadata, and follow the requested output schema exactly. Questions must read like standalone exam items that test general knowledge derived from the source, not like reading-comprehension questions about a specific chapter, text, passage, excerpt, or textbook. Distractors must be subtle, plausible, and parallel to the correct answer rather than obviously wrong, absurd, or from an unrelated domain.`;
+const DEFAULT_SYSTEM_PROMPT = `You create high-quality bilingual veterinary textbook quizzes and very short quiz metadata, and follow the requested output schema exactly. Questions must read like standalone exam items that test general knowledge derived from the source, not like reading-comprehension questions about a specific chapter, text, passage, excerpt, or textbook. Distractors must be subtle, plausible, and parallel to the correct answer rather than obviously wrong, absurd, or from an unrelated domain. When metadata is requested, keep it extremely short and chapter-like.`;
 
 const DEFAULT_PROMPT_TEMPLATE = `You are creating bilingual multiple-choice quiz questions from a textbook excerpt.
 
@@ -99,9 +99,11 @@ Follow these rules strictly:
 - Output both English and Japanese versions for each question.
 - Use natural Japanese.
 - Also generate quiz metadata:
-  - title: a concise English quiz title, ideally 3-12 words, focused on the medical topic.
-  - description: a concise one-line bilingual summary written as "English / 日本語".
-- The title and description must not mention the chapter, text, textbook, excerpt, passage, source text, 本文, 抜粋文, この章, このチャプター, この教科書, このテキスト, or reading-comprehension framing.
+  - title: a very short saved-quiz title. If the source explicitly shows a chapter number or chapter label, prefer a format like "Ch 12: Renal Biomarkers". If no chapter number is shown, use only a very short topic title.
+  - description: only a very short chapter title or topic label, ideally 2-6 words, not a sentence, not bilingual, and without explanatory phrasing.
+- The title and description should be brief enough to scan easily in a saved quiz list.
+- Do not write a summary sentence.
+- Do not mention the chapter, text, textbook, excerpt, passage, source text, 本文, 抜粋文, この章, このチャプター, この教科書, このテキスト, or reading-comprehension framing, except that an explicit chapter marker like "Ch 12" is allowed when it is clearly present in the source.
 - The question stem should ask what is correct/appropriate, not "which matches the text".
 - Questions must read like standalone exam items, not like reading-comprehension questions about a chapter or passage.
 - Never mention the chapter, text, textbook, excerpt, passage, source text, 本文, 抜粋文, この章, このチャプター, この教科書, or このテキスト in the question stem or explanation.
@@ -130,7 +132,7 @@ Follow these rules strictly:
 ・4つの選択肢は、同じ話題・同じ粒度・近い長さでそろえてください。
 ・onlyやexclusivelyなどの正誤がわかりやすい表現は避けてください。
 ・引用文献リスト、参考文献、著者情報、謝辞、client information などから作問しないでください。
-・title は簡潔な英語題名、description は "English / 日本語" 形式の1行要約にしてください。
+・title は保存済みクイズ一覧で見やすい、短い章タイトル風の表現にしてください。章番号が明示されていれば Ch 12: Renal Biomarkers のような形を優先してください。description は短い章タイトルだけにし、1文の要約や bilingual 形式にはしないでください。
 
 Source text:
 """{{sourceText}}"""`;
@@ -143,9 +145,28 @@ function slugify(s=''){
 function cleanGeneratedMetadataText(s=''){
   return String(s || '').replace(/\s+/g,' ').trim();
 }
+function normalizeGeneratedTitle(s='', fallbackTitle='Generated Quiz'){
+  let text = cleanGeneratedMetadataText(s || fallbackTitle);
+  text = text.replace(/^Chapter\s+(\d+)\s*[:\-–—]?\s*/i, 'Ch $1: ');
+  text = text.replace(/^Ch\s*(\d+)\s*[:\-–—]?\s*/i, 'Ch $1: ');
+  text = text.replace(/\s*[:\-–—]\s*$/, '').trim();
+  return text || fallbackTitle;
+}
+function normalizeGeneratedDescription(s='', fallbackTitle=''){
+  let text = cleanGeneratedMetadataText(s || '');
+  if(text.includes(' / ')) text = text.split(' / ')[0].trim();
+  text = text.replace(/^Chapter\s+\d+\s*[:\-–—]?\s*/i, '');
+  text = text.replace(/^Ch\s*\d+\s*[:\-–—]?\s*/i, '');
+  text = text.replace(/^Topic\s*[:\-–—]?\s*/i, '');
+  text = text.replace(/\.$/, '').trim();
+  if(!text && fallbackTitle){
+    text = normalizeGeneratedTitle(fallbackTitle).replace(/^Ch\s*\d+\s*[:\-–—]?\s*/i, '').trim();
+  }
+  return text;
+}
 function applyGeneratedMetadata(meta, fallbackTitle='Generated Quiz'){
-  state.title = cleanGeneratedMetadataText(meta?.title || '') || fallbackTitle;
-  state.description = cleanGeneratedMetadataText(meta?.description || '');
+  state.title = normalizeGeneratedTitle(meta?.title || '', fallbackTitle);
+  state.description = normalizeGeneratedDescription(meta?.description || '', state.title);
 }
 function shuffleArray(arr){
   const a = arr.slice();
@@ -1433,15 +1454,15 @@ function render(){
       <h2>1. Quiz generation</h2>
       <div class="row">
         <div>
-          <label>Generated title</label>
-          <div class="alert">${state.title ? escapeHtml(state.title) : '<span class="muted">AI作問時に本文から自動生成されます。</span>'}</div>
+          <label for="generatedTitle">Short title</label>
+          <input id="generatedTitle" type="text" value="${escapeHtml(state.title)}" placeholder="AI作問時に本文から短い章タイトル風に自動生成されます。">
         </div>
         <div>
-          <label>Generated description</label>
-          <div class="alert">${state.description ? escapeHtml(state.description) : '<span class="muted">AI作問時に本文から自動生成されます。</span>'}</div>
+          <label for="generatedDescription">Short description</label>
+          <input id="generatedDescription" type="text" value="${escapeHtml(state.description)}" placeholder="AI作問時に本文から短い章タイトル風に自動生成されます。">
         </div>
       </div>
-      <div class="small muted" style="margin-top:8px;">title / description は本文から自動生成されます。個別編集UIは入れていません。</div>
+      <div class="small muted" style="margin-top:8px;">title / description は本文から自動生成されたあと、Builder上で自由に編集できます。</div>
 
       <div class="row" style="margin-top:14px;">
         <div>
@@ -1652,11 +1673,18 @@ function render(){
     };
   }
 
-  ['systemPrompt','promptTemplate','listSearch'].forEach(id=>{
+  ['systemPrompt','promptTemplate','listSearch','generatedTitle','generatedDescription'].forEach(id=>{
     const el = document.getElementById(id);
     if(!el) return;
     el.addEventListener('input', e=>{
-      state[id] = e.target.value;
+      const value = e.target.value;
+      if(id === 'generatedTitle'){
+        state.title = value;
+      }else if(id === 'generatedDescription'){
+        state.description = value;
+      }else{
+        state[id] = value;
+      }
       saveLocal();
       if(id === 'listSearch') render();
     });
