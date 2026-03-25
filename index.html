@@ -83,6 +83,7 @@ const DEFAULT_SUPABASE_URL = "https://pkabndydlnpjpfyxkaao.supabase.co";
 const DEFAULT_SUPABASE_PUBLISHABLE_KEY = "sb_publishable_5DSYUyEVrvTSOspr9LTN4w_RByBkdyp";
 const STORAGE_KEY = "quiz_builder_supabase_list_v5";
 const QUIZ_META_KEY = "quiz_builder_saved_quiz_meta_v1";
+const DRAFT_SNAPSHOT_KEY = "quiz_builder_local_draft_snapshot_v1";
 const PROMPT_DEFAULTS_VERSION = 1;
 
 const SAMPLE_TSV = `No\tQuestion\tOption A\tOption B\tOption C\tOption D\tCorrect Answer\tExplanation\tSupporting Excerpt
@@ -525,6 +526,12 @@ const state = {
   listSearch: '',
   listSort: 'created_desc',
   showHidden: false,
+  draftId: '',
+  draftUpdatedAt: '',
+  draftStatus: '',
+  draftError: '',
+  hasLocalSnapshot: false,
+  snapshotUpdatedAt: '',
   previewQuestions: [],
   reviewNotes: {},
   reviewBusyNo: null,
@@ -541,6 +548,7 @@ const state = {
 
 let browserSupabaseClient = null;
 let authListenerAttached = false;
+let snapshotSaveTimer = null;
 
 function getBuilderRedirectUrl(){
   return `${location.origin}${location.pathname}`;
@@ -646,6 +654,7 @@ async function sendBuilderMagicLink(){
 }
 
 async function signOutBuilder(){
+  try{ persistDraftSnapshotLocal(); }catch(_e){}
   const supabase = getBrowserSupabaseClient();
   const { error } = await supabase.auth.signOut();
   if(error) throw error;
@@ -659,7 +668,7 @@ async function signOutBuilder(){
   clearBuilderVolatileState();
 }
 
-function clearBuilderVolatileState(){
+function clearBuilderVolatileState({ discardSnapshot = false } = {}){
   state.title = '';
   state.description = '';
   state.slug = '';
@@ -678,12 +687,19 @@ function clearBuilderVolatileState(){
   state.aiError = '';
   state.generatedEnTsv = '';
   state.generatedJaTsv = '';
+  state.draftId = '';
+  state.draftUpdatedAt = '';
+  state.draftStatus = '';
+  state.draftError = '';
   state.previewQuestions = [];
   state.reviewNotes = {};
   state.reviewBusyNo = null;
   state.reviewUpdatedNos = {};
   state.reviewStatus = '';
   state.reviewError = '';
+  if(discardSnapshot){
+    discardLocalDraftSnapshot();
+  }
 }
 
 function syncPromptMode(){
@@ -758,6 +774,160 @@ function setQuizMeta(slug, patch){
   if(!slug) return;
   state.quizMeta[slug] = { ...getQuizMeta(slug), ...patch };
   saveQuizMeta();
+}
+
+function formatDraftTimestamp(iso=''){
+  if(!iso) return '';
+  const d = new Date(iso);
+  if(Number.isNaN(d.getTime())) return String(iso || '');
+  return d.toLocaleString('ja-JP');
+}
+
+function hasDraftContent(){
+  return !!(
+    (state.title || '').trim() ||
+    (state.description || '').trim() ||
+    (state.sourceText || '').trim() ||
+    (Array.isArray(state.previewQuestions) && state.previewQuestions.length) ||
+    Object.keys(state.reviewNotes || {}).some(k => String(state.reviewNotes[k] || '').trim()) ||
+    Object.keys(state.reviewUpdatedNos || {}).length
+  );
+}
+
+function buildDraftPayload(){
+  return {
+    owner_id: state.authUser?.id || '',
+    title: state.title || '',
+    description: state.description || '',
+    source_text: state.sourceText || '',
+    question_count: clampNumber(Number(state.questionCount || 10), 1, 20),
+    question_count_mode: state.questionCountMode === 'manual' ? 'manual' : 'auto',
+    shuffle_questions: !!state.shuffleQuestions,
+    shuffle_choices: !!state.shuffleChoices,
+    system_prompt: state.systemPrompt || DEFAULT_SYSTEM_PROMPT,
+    prompt_template: state.promptTemplate || DEFAULT_PROMPT_TEMPLATE,
+    auto_save_language: state.autoSaveLanguage || 'en',
+    preview_questions: Array.isArray(state.previewQuestions) ? state.previewQuestions : [],
+    review_notes: state.reviewNotes || {},
+    review_updated_nos: state.reviewUpdatedNos || {},
+    updated_at: new Date().toISOString(),
+  };
+}
+
+function applyDraftData(raw={}, { sourceLabel='下書き' } = {}){
+  state.draftId = raw.id || raw.draft_id || '';
+  state.draftUpdatedAt = raw.updated_at || raw.draft_updated_at || '';
+  state.title = raw.title || '';
+  state.description = raw.description || '';
+  state.slug = '';
+  state.shareLink = '';
+  state.shareLinks = { en: '', ja: '' };
+  state.sourceText = raw.source_text || '';
+  state.questionCount = clampNumber(Number(raw.question_count || 10), 1, 20);
+  state.questionCountMode = raw.question_count_mode === 'manual' ? 'manual' : 'auto';
+  state.shuffleQuestions = !!raw.shuffle_questions;
+  state.shuffleChoices = !!raw.shuffle_choices;
+  state.systemPrompt = raw.system_prompt || DEFAULT_SYSTEM_PROMPT;
+  state.promptTemplate = raw.prompt_template || DEFAULT_PROMPT_TEMPLATE;
+  state.autoSaveLanguage = raw.auto_save_language || 'en';
+  state.previewQuestions = Array.isArray(raw.preview_questions) ? raw.preview_questions : [];
+  state.reviewNotes = raw.review_notes || {};
+  state.reviewUpdatedNos = raw.review_updated_nos || {};
+  state.reviewBusyNo = null;
+  state.reviewStatus = '';
+  state.reviewError = '';
+  state.aiStatus = '';
+  state.aiError = '';
+  state.error = '';
+  state.status = `${sourceLabel}を読み込みました。レビューを続けるか、必要なら保存URLを作成できます。`;
+  state.questions = [];
+  state.rendered = [];
+  state.answers = {};
+  state.generatedEnTsv = state.previewQuestions.length ? makeTsvEnFromQuestions(state.previewQuestions) : '';
+  state.generatedJaTsv = state.previewQuestions.length ? makeTsvJaFromQuestions(state.previewQuestions) : '';
+  syncPromptMode();
+}
+
+function loadLocalDraftSnapshotMeta(){
+  const raw = localStorage.getItem(DRAFT_SNAPSHOT_KEY);
+  if(!raw){
+    state.hasLocalSnapshot = false;
+    state.snapshotUpdatedAt = '';
+    return;
+  }
+  try{
+    const parsed = JSON.parse(raw);
+    state.hasLocalSnapshot = !!parsed?.data;
+    state.snapshotUpdatedAt = parsed?.saved_at || '';
+  }catch(e){
+    state.hasLocalSnapshot = false;
+    state.snapshotUpdatedAt = '';
+  }
+}
+
+function discardLocalDraftSnapshot(){
+  if(snapshotSaveTimer){
+    clearTimeout(snapshotSaveTimer);
+    snapshotSaveTimer = null;
+  }
+  localStorage.removeItem(DRAFT_SNAPSHOT_KEY);
+  state.hasLocalSnapshot = false;
+  state.snapshotUpdatedAt = '';
+}
+
+function persistDraftSnapshotLocal(){
+  if(state.mode === 'solver') return false;
+  if(!hasDraftContent()){
+    discardLocalDraftSnapshot();
+    return false;
+  }
+  const snapshot = {
+    saved_at: new Date().toISOString(),
+    draft_id: state.draftId || '',
+    draft_updated_at: state.draftUpdatedAt || '',
+    data: buildDraftPayload(),
+  };
+  try{
+    localStorage.setItem(DRAFT_SNAPSHOT_KEY, JSON.stringify(snapshot));
+    state.hasLocalSnapshot = true;
+    state.snapshotUpdatedAt = snapshot.saved_at;
+    return true;
+  }catch(e){
+    state.hasLocalSnapshot = false;
+    state.snapshotUpdatedAt = '';
+    return false;
+  }
+}
+
+function scheduleDraftSnapshotSave(){
+  if(state.mode === 'solver') return;
+  if(snapshotSaveTimer) clearTimeout(snapshotSaveTimer);
+  snapshotSaveTimer = setTimeout(()=>{
+    snapshotSaveTimer = null;
+    try{ persistDraftSnapshotLocal(); }catch(_e){}
+  }, 400);
+}
+
+function restoreLocalDraftSnapshot(){
+  const raw = localStorage.getItem(DRAFT_SNAPSHOT_KEY);
+  if(!raw) throw new Error('復元できる local snapshot が見つかりませんでした。');
+  let parsed;
+  try{
+    parsed = JSON.parse(raw);
+  }catch(e){
+    throw new Error('local snapshot の内容を読み込めませんでした。');
+  }
+  if(!parsed?.data) throw new Error('local snapshot の内容を読み込めませんでした。');
+  applyDraftData({
+    ...parsed.data,
+    draft_id: parsed.draft_id || '',
+    draft_updated_at: parsed.draft_updated_at || '',
+  }, { sourceLabel:'local snapshot' });
+  state.draftStatus = 'local snapshot を復元しました。';
+  state.draftError = '';
+  state.hasLocalSnapshot = true;
+  state.snapshotUpdatedAt = parsed.saved_at || '';
+  persistDraftSnapshotLocal();
 }
 
 function buildQuizQuestionsForLanguage(sourceQuestions, language='en'){
@@ -1012,6 +1182,68 @@ async function refreshQuizList(){
   }
 }
 
+async function saveBuilderDraft(){
+  if(!state.authUser) throw new Error('下書きを保存するにはログインしてください。');
+  if(!hasDraftContent()) throw new Error('保存する途中データがまだありません。');
+  state.draftError = '';
+  state.draftStatus = state.draftId ? '下書きを更新中です...' : '下書きを保存中です...';
+  render();
+
+  const payload = buildDraftPayload();
+  let rows = null;
+
+  if(state.draftId){
+    rows = await supabaseRequest(`/rest/v1/quiz_drafts?id=eq.${encodeURIComponent(state.draftId)}&select=id,updated_at`, {
+      method:'PATCH',
+      body: payload,
+      prefer:'return=representation',
+    });
+    if(!Array.isArray(rows) || rows.length === 0){
+      state.draftId = '';
+      state.draftUpdatedAt = '';
+      rows = null;
+    }
+  }
+
+  if(!rows){
+    rows = await supabaseRequest('/rest/v1/quiz_drafts?select=id,updated_at', {
+      method:'POST',
+      body: payload,
+      prefer:'return=representation',
+    });
+  }
+
+  const row = Array.isArray(rows) ? rows[0] : rows;
+  if(!row?.id) throw new Error('下書き保存後の応答を確認できませんでした。');
+  state.draftId = row.id;
+  state.draftUpdatedAt = row.updated_at || new Date().toISOString();
+  state.draftStatus = 'Supabase に private draft を保存しました。Load latest draft で続きから再開できます。';
+  state.draftError = '';
+  persistDraftSnapshotLocal();
+  render();
+}
+
+async function loadLatestBuilderDraft(){
+  if(!state.authUser) throw new Error('下書きを読み込むにはログインしてください。');
+  const rows = await supabaseRequest('/rest/v1/quiz_drafts?select=*&order=updated_at.desc&limit=1', {method:'GET'});
+  if(!Array.isArray(rows) || rows.length === 0) throw new Error('保存済みの下書きが見つかりませんでした。');
+  applyDraftData(rows[0], { sourceLabel:'最新の下書き' });
+  state.draftStatus = '最新の下書きを読み込みました。';
+  state.draftError = '';
+  persistDraftSnapshotLocal();
+}
+
+async function deleteCurrentBuilderDraft(){
+  if(!state.draftId) throw new Error('削除対象の下書きがありません。');
+  const deletingId = state.draftId;
+  await supabaseRequest(`/rest/v1/quiz_drafts?id=eq.${encodeURIComponent(deletingId)}`, {method:'DELETE'});
+  state.draftId = '';
+  state.draftUpdatedAt = '';
+  state.draftStatus = '読み込み中だった下書きを Supabase から削除しました。現在の画面内容はそのまま残しています。';
+  state.draftError = '';
+  persistDraftSnapshotLocal();
+}
+
 function getFilteredSortedQuizList(){
   const needle = (state.listSearch || '').trim().toLowerCase();
 
@@ -1241,6 +1473,7 @@ async function generateQuizWithAI(){
   state.generatedJaTsv = makeTsvJaFromQuestions(allQuestions);
   state.aiError = '';
   saveLocal();
+  persistDraftSnapshotLocal();
 }
 
 async function regenerateSingleQuestion(no){
@@ -1288,6 +1521,7 @@ async function regenerateSingleQuestion(no){
     state.reviewError = '';
     state.shareLink = '';
     state.shareLinks = { en: '', ja: '' };
+    persistDraftSnapshotLocal();
   } finally {
     state.reviewBusyNo = null;
     render();
@@ -1310,12 +1544,14 @@ async function saveReviewedQuiz(language='en'){
 
   state.status = `${language === 'ja' ? '日本語版' : 'English版'}のURLを作成しました。必要ならもう一方の言語も同じレビュー結果から保存できます。`;
   saveLocal();
+  persistDraftSnapshotLocal();
   render();
 }
 
 function render(){
   const app = document.getElementById('app');
   const sourceMetrics = getQuestionCountMetrics(state.sourceText);
+  const hasDraftData = hasDraftContent();
   if(state.mode !== 'solver' && state.questionCountMode === 'auto'){
     state.questionCount = sourceMetrics.recommended;
   }
@@ -1621,7 +1857,39 @@ function render(){
     <div class="card">
       <div class="topbar">
         <div>
-          <h2>4. Saved quizzes</h2>
+          <h2>4. Draft save and resume</h2>
+          <p class="muted">公開URLを作る前のレビュー途中状態を、private draft として保存できます。</p>
+        </div>
+        <div>
+          ${state.draftId ? `<span class="pill">server draft linked</span>` : `<span class="pill">server draft none</span>`}
+          ${state.hasLocalSnapshot ? `<span class="pill">local snapshot</span>` : ''}
+        </div>
+      </div>
+
+      <div class="alert info" style="margin-top:12px;">Save draft は、ログイン中のユーザーだけが読める private draft として Supabase に保存します。Load latest draft で続きから再開できます。local snapshot は、このブラウザだけの緊急退避です。</div>
+      <div class="small muted" style="margin-top:10px;">
+        ${state.draftId ? `現在の画面は保存済み draft にひも付いています。最終保存: ${escapeHtml(formatDraftTimestamp(state.draftUpdatedAt))}` : 'まだ Supabase の draft には保存していません。'}
+      </div>
+      <div class="small muted" style="margin-top:4px;">
+        ${state.hasLocalSnapshot ? `このブラウザには local snapshot があります。最終記録: ${escapeHtml(formatDraftTimestamp(state.snapshotUpdatedAt))}` : 'local snapshot はまだありません。'}
+      </div>
+
+      <div class="btns">
+        <button id="saveDraftBtn" ${hasDraftData ? '' : 'disabled'}>Save draft</button>
+        <button class="secondary" id="loadLatestDraftBtn">Load latest draft</button>
+        <button class="secondary" id="restoreLocalSnapshotBtn" ${state.hasLocalSnapshot ? '' : 'disabled'}>Restore local snapshot</button>
+        <button class="secondary" id="discardLocalSnapshotBtn" ${state.hasLocalSnapshot ? '' : 'disabled'}>Discard local snapshot</button>
+        <button class="secondary" id="deleteCurrentDraftBtn" ${state.draftId ? '' : 'disabled'}>Delete loaded draft</button>
+      </div>
+
+      ${state.draftError ? `<div class="alert error" style="margin-top:12px;">${escapeHtml(state.draftError)}</div>` : ''}
+      ${state.draftStatus ? `<div class="alert ok" style="margin-top:12px;">${escapeHtml(state.draftStatus)}</div>` : ''}
+    </div>
+
+    <div class="card">
+      <div class="topbar">
+        <div>
+          <h2>5. Saved quizzes</h2>
           <p class="muted">検索、並べ替え、出題済み管理、非表示管理ができます。</p>
         </div>
         <div class="btns" style="margin-top:0;">
@@ -1686,6 +1954,7 @@ function render(){
         state[id] = value;
       }
       saveLocal();
+      if(id !== 'listSearch') scheduleDraftSnapshotSave();
       if(id === 'listSearch') render();
     });
   });
@@ -1694,6 +1963,7 @@ function render(){
     state.questionCount = clampNumber(Number(e.target.value || 10), 1, 20);
     state.questionCountMode = 'manual';
     saveLocal();
+    scheduleDraftSnapshotSave();
     render();
   });
 
@@ -1701,6 +1971,7 @@ function render(){
     state.questionCountMode = 'auto';
     applyAutoQuestionCount({ force: true });
     saveLocal();
+    scheduleDraftSnapshotSave();
     render();
   };
 
@@ -1722,14 +1993,15 @@ function render(){
       state.sourceText = e.target.value;
       applyAutoQuestionCount({ syncDom: true });
       saveLocal();
+      scheduleDraftSnapshotSave();
     });
     sourceTextEl.addEventListener('change', ()=>{
       render();
     });
   }
 
-  document.getElementById('shuffleQ').addEventListener('change', e=>{ state.shuffleQuestions = e.target.checked; saveLocal(); });
-  document.getElementById('shuffleC').addEventListener('change', e=>{ state.shuffleChoices = e.target.checked; saveLocal(); });
+  document.getElementById('shuffleQ').addEventListener('change', e=>{ state.shuffleQuestions = e.target.checked; saveLocal(); scheduleDraftSnapshotSave(); });
+  document.getElementById('shuffleC').addEventListener('change', e=>{ state.shuffleChoices = e.target.checked; saveLocal(); scheduleDraftSnapshotSave(); });
 
   document.getElementById('resetPromptBtn').onclick = ()=>{
     state.systemPrompt = DEFAULT_SYSTEM_PROMPT;
@@ -1738,11 +2010,12 @@ function render(){
     state.aiStatus = 'プロンプトを初期設定に戻しました。';
     state.aiError = '';
     saveLocal();
+    scheduleDraftSnapshotSave();
     render();
   };
 
   document.getElementById('clearBuilderBtn').onclick = ()=>{
-    clearBuilderVolatileState();
+    clearBuilderVolatileState({ discardSnapshot: true });
     saveLocal();
     render();
   };
@@ -1809,8 +2082,83 @@ function render(){
   document.querySelectorAll('.review-note').forEach(el=>{
     el.addEventListener('input', e=>{
       state.reviewNotes[e.target.dataset.no || ''] = e.target.value;
+      scheduleDraftSnapshotSave();
     });
   });
+
+  const saveDraftBtn = document.getElementById('saveDraftBtn');
+  if(saveDraftBtn){
+    saveDraftBtn.onclick = async ()=>{
+      try{
+        await saveBuilderDraft();
+      }catch(e){
+        state.draftStatus = '';
+        state.draftError = e.message || '下書きの保存に失敗しました。';
+        render();
+      }
+    };
+  }
+
+  const loadLatestDraftBtn = document.getElementById('loadLatestDraftBtn');
+  if(loadLatestDraftBtn){
+    loadLatestDraftBtn.onclick = async ()=>{
+      try{
+        if(hasDraftContent() && !confirm('現在の編集中内容は上書きされます。先に Save draft しておくと安全です。最新の下書きを読み込みますか？')) return;
+        state.draftError = '';
+        state.draftStatus = '最新の下書きを読み込み中です...';
+        render();
+        await loadLatestBuilderDraft();
+        render();
+      }catch(e){
+        state.draftStatus = '';
+        state.draftError = e.message || '下書きの読み込みに失敗しました。';
+        render();
+      }
+    };
+  }
+
+  const restoreLocalSnapshotBtn = document.getElementById('restoreLocalSnapshotBtn');
+  if(restoreLocalSnapshotBtn){
+    restoreLocalSnapshotBtn.onclick = ()=>{
+      try{
+        if(hasDraftContent() && !confirm('現在の編集中内容は上書きされます。local snapshot を復元しますか？')) return;
+        restoreLocalDraftSnapshot();
+        render();
+      }catch(e){
+        state.draftStatus = '';
+        state.draftError = e.message || 'local snapshot の復元に失敗しました。';
+        render();
+      }
+    };
+  }
+
+  const discardLocalSnapshotBtn = document.getElementById('discardLocalSnapshotBtn');
+  if(discardLocalSnapshotBtn){
+    discardLocalSnapshotBtn.onclick = ()=>{
+      discardLocalDraftSnapshot();
+      state.draftStatus = 'local snapshot を削除しました。';
+      state.draftError = '';
+      render();
+    };
+  }
+
+  const deleteCurrentDraftBtn = document.getElementById('deleteCurrentDraftBtn');
+  if(deleteCurrentDraftBtn){
+    deleteCurrentDraftBtn.onclick = async ()=>{
+      try{
+        if(!confirm('現在ひも付いている Supabase draft を削除します。画面上の内容は残します。削除しますか？')) return;
+        state.draftError = '';
+        state.draftStatus = '下書きを削除しています...';
+        render();
+        await deleteCurrentBuilderDraft();
+        render();
+      }catch(e){
+        state.draftStatus = '';
+        state.draftError = e.message || '下書きの削除に失敗しました。';
+        render();
+      }
+    };
+  }
 
   document.getElementById('refreshListBtn').onclick = refreshQuizList;
 
@@ -1878,9 +2226,14 @@ function render(){
 
 }
 
+window.addEventListener('beforeunload', ()=>{
+  try{ persistDraftSnapshotLocal(); }catch(_e){}
+});
+
 (async function init(){
   loadLocal();
   loadQuizMeta();
+  loadLocalDraftSnapshotMeta();
   const quizSlug = getSlugFromQuery();
   if(quizSlug){
     try{
