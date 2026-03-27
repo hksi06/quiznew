@@ -90,7 +90,7 @@ const PROMPT_DEFAULTS_VERSION = 1;
 const SAMPLE_TSV = `No\tQuestion\tOption A\tOption B\tOption C\tOption D\tCorrect Answer\tExplanation\tSupporting Excerpt
 1\tWhich statement about an ideal renal biomarker is appropriate?\tIt should show wide biologic variability and partial protein binding.\tIt should be easy to measure and cost-effective.\tIt should undergo substantial non-renal metabolism.\tIt should be secreted and reabsorbed by the tubules.\tB\tThe chapter lists easy measurability and cost-effectiveness among the ideal properties of a renal biomarker.\tThe ideal properties of a renal biomarker include ... easy measurability, and cost-effectiveness.`;
 
-const DEFAULT_SYSTEM_PROMPT = `You create high-quality bilingual veterinary textbook quizzes and very short quiz metadata, and follow the requested output schema exactly. Questions must read like standalone exam items that test general knowledge derived from the source, not like reading-comprehension questions about a specific chapter, text, passage, excerpt, or textbook. Distractors must be subtle, plausible, and parallel to the correct answer rather than obviously wrong, absurd, or from an unrelated domain. When metadata is requested, keep it extremely short and chapter-like.`;
+const DEFAULT_SYSTEM_PROMPT = `You create high-quality bilingual veterinary textbook quizzes and very short quiz metadata, and follow the requested output schema exactly. Questions must read like standalone exam items that test general knowledge derived from the source, not like reading-comprehension questions about a specific chapter, text, passage, excerpt, or textbook. Across a set, questions should cover distinct learning points and should not repeat the same concept in paraphrased form. Distractors must be subtle, plausible, and parallel to the correct answer rather than obviously wrong, absurd, or from an unrelated domain. Options should be structurally parallel and roughly balanced in length and information density, and incorrect options should be incorrect for substantive content reasons rather than giveaway wording. When metadata is requested, keep it extremely short and chapter-like.`;
 
 const DEFAULT_PROMPT_TEMPLATE = `You are creating bilingual multiple-choice quiz questions from a textbook excerpt.
 
@@ -110,13 +110,22 @@ Follow these rules strictly:
 - Questions must read like standalone exam items, not like reading-comprehension questions about a chapter or passage.
 - Never mention the chapter, text, textbook, excerpt, passage, source text, 本文, 抜粋文, この章, このチャプター, この教科書, or このテキスト in the question stem or explanation.
 - Before finalizing each question, rewrite any text-referential wording into a general-knowledge wording.
+- Each question must test a distinct learning point from the source.
+- Do not ask the same fact, concept, mechanism, indication, interpretation, definition, or comparison more than once, even with different wording or a different correct option.
+- Before finalizing the full set, compare all items and replace any overlapping or near-duplicate question with a different high-yield point from the source.
 - Make distractors genuinely competitive:
   - Each incorrect option should sound plausible to a learner with partial understanding.
-  - Keep all four options in the same domain, same level of specificity, and similar length/tone.
+  - Keep all four options in the same domain, same level of specificity, similar tone, and roughly similar length.
+  - Make the four options structurally parallel whenever possible.
+  - Do not make the correct answer systematically longer, more qualified, more nuanced, or more information-dense than the distractors.
+  - Avoid patterns where one option stands out because it contains extra conditions, extra detail, or noticeably greater precision.
+  - If one option needs a qualifier, consider whether comparable qualifiers should be added to the other options so the set remains balanced.
   - Avoid absurd, opposite, unrelated, or giveaway distractors.
-  - Avoid options that can be ruled out instantly because they are too broad, too narrow, or grammatically mismatched.
+  - Avoid options that can be ruled out instantly because they are too broad, too narrow, grammatically mismatched, or stylistically different.
   - Prefer nuanced distinctions in mechanism, indication, interpretation, timing, severity, definition, or comparative appropriateness.
-- Avoid giveaway wording such as "always", "never", "unnecessary", "only", "exclusively", "不要", "常に", and "十分である".
+- Do not make an incorrect option wrong mainly because it uses lexical giveaway cues such as "always", "never", "only", "alone", "exclusively", "solely", "entirely", "completely", "all", "none", "must", "impossible", "不要", "必ず", "常に", "のみ", or "だけ".
+- An incorrect option must be incorrect for a substantive content reason, not merely because of extreme, absolute, or exclusive wording.
+- Before finalizing each item, check whether one option is easier to eliminate because of wording, length, or style; if so, rewrite the full option set to make it more even.
 - Do not bold the correct answer.
 - Randomize correct answer positions across questions.
 - Include a brief explanation in English and Japanese.
@@ -131,8 +140,14 @@ Follow these rules strictly:
 ・問題文は独立した試験問題のように見える文章にしてください。
 ・誤答選択肢は、部分理解の受験者なら選びうるもっともらしい内容にしてください。
 ・誤答選択肢は、極端に不自然、露骨に逆、本文と無関係、長さや粒度が明らかに不揃い、という形にしないでください。
-・4つの選択肢は、同じ話題・同じ粒度・近い長さでそろえてください。
-・onlyやexclusivelyなどの正誤がわかりやすい表現は避けてください。
+・4つの選択肢は、同じ話題・同じ粒度・近い長さ・近い文体でそろえ、可能な限り文の構造も平行にしてください。
+・正答だけが不自然に長い、条件が多い、限定句が多い、情報量が多い、という形にしないでください。
+・1つの選択肢だけが詳細で、他が短く粗い、というセットを避けてください。
+・誤答は、only、alone、exclusively、solely、always、never、必ず、常に、のみ、だけ などの語だけで簡単に消去できる形にしないでください。
+・誤答は、語感ではなく内容上の理由で誤答になるようにしてください。
+・各問題は、本文中の異なる学習ポイントを問うようにしてください。
+・言い換えただけで同じ内容を問う問題、同じ事実・概念・機序・適応・解釈・定義・比較を繰り返す問題を作らないでください。
+・全体を見直して、内容が重複または近接している問題があれば、本文中の別の重要ポイントを問う問題に置き換えてください。
 ・引用文献リスト、参考文献、著者情報、謝辞、client information などから作問しないでください。
 ・title は保存済みクイズ一覧で見やすい、短い章タイトル風の表現にしてください。章番号が明示されていれば Ch 12: Renal Biomarkers のような形を優先してください。description は短い章タイトルだけにし、1文の要約や bilingual 形式にはしないでください。
 
@@ -1008,9 +1023,167 @@ function getUpdatedReviewCount(){
   return Object.keys(state.reviewUpdatedNos || {}).length;
 }
 
-function buildReplacementPromptTemplate(groupQuestions, keptQuestions){
+const DUPLICATE_FIX_MAX_ROUNDS = 2;
+const DUPLICATE_FIX_MAX_ITEMS_PER_ROUND = 3;
+const DUPLICATE_SIMILARITY_STOPWORDS = new Set([
+  'which','what','statement','following','regarding','about','concerning','most','least','likely','appropriate','correct','incorrect','best','true','false','describes','description','described','identify','identifies','identified','choose','select','item','items','question','questions','option','options','is','are','was','were','be','being','been','can','could','should','would','may','might','does','do','did','not','than','then','that','this','these','those','from','with','without','into','onto','upon','during','after','before','within','through','because','while','when','where','who','whom','whose','why','how','for','and','or','but','the','a','an','of','to','in','on','by','as','at','it','its','their','there','such','one','two','three','four'
+]);
+
+function normalizeSimilarityText(s=''){
+  return String(s || '')
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function tokenizeSimilarityText(s=''){
+  return normalizeSimilarityText(s)
+    .split(' ')
+    .filter(token => token && !DUPLICATE_SIMILARITY_STOPWORDS.has(token) && (token.length >= 3 || /\d/.test(token)));
+}
+
+function makeTokenNgrams(tokens, n=2){
+  const grams = [];
+  if(tokens.length < n) return grams;
+  for(let i = 0; i <= tokens.length - n; i++) grams.push(tokens.slice(i, i + n).join(' '));
+  return grams;
+}
+
+function setJaccard(a, b){
+  if(!a.size || !b.size) return 0;
+  let intersection = 0;
+  for(const value of a){ if(b.has(value)) intersection++; }
+  const union = new Set([...a, ...b]).size;
+  return union ? (intersection / union) : 0;
+}
+
+function getQuestionOptionByLetter(q, letter){
+  const key = String(letter || '').toUpperCase();
+  if(key === 'A') return q.optionA_en || '';
+  if(key === 'B') return q.optionB_en || '';
+  if(key === 'C') return q.optionC_en || '';
+  if(key === 'D') return q.optionD_en || '';
+  return '';
+}
+
+function buildQuestionSimilarityProfile(q){
+  const stemTokens = tokenizeSimilarityText(q.question_en || '');
+  const answerTokens = tokenizeSimilarityText(`${getQuestionOptionByLetter(q, q.correct)} ${(q.excerpt || '')}`);
+  return {
+    stemNorm: normalizeSimilarityText(q.question_en || ''),
+    stemSet: new Set(stemTokens),
+    stemBigramSet: new Set(makeTokenNgrams(stemTokens, 2)),
+    answerSet: new Set(answerTokens),
+    combinedSet: new Set([...stemTokens, ...answerTokens]),
+  };
+}
+
+function getDuplicateReason(a, b){
+  const pa = buildQuestionSimilarityProfile(a);
+  const pb = buildQuestionSimilarityProfile(b);
+  if(pa.stemNorm && pa.stemNorm === pb.stemNorm) return 'question stem overlap';
+  if(pa.stemSet.size < 3 || pb.stemSet.size < 3) return '';
+
+  const stemTokenSim = setJaccard(pa.stemSet, pb.stemSet);
+  const stemBigramSim = setJaccard(pa.stemBigramSet, pb.stemBigramSet);
+  const answerSim = setJaccard(pa.answerSet, pb.answerSet);
+  const combinedSim = setJaccard(pa.combinedSet, pb.combinedSet);
+
+  if(stemBigramSim >= 0.74) return 'very similar stem phrasing';
+  if(stemTokenSim >= 0.72 && combinedSim >= 0.58) return 'same learning point phrased differently';
+  if(stemTokenSim >= 0.64 && answerSim >= 0.55 && combinedSim >= 0.55) return 'same concept and answer area';
+  return '';
+}
+
+function findLikelyDuplicatePairs(questions){
+  const pairs = [];
+  const list = Array.isArray(questions) ? questions.slice().sort((a,b)=>Number(a.no) - Number(b.no)) : [];
+  for(let i = 0; i < list.length; i++){
+    for(let j = i + 1; j < list.length; j++){
+      const reason = getDuplicateReason(list[i], list[j]);
+      if(reason){
+        pairs.push({
+          keepNo: Number(list[i].no),
+          replaceNo: Number(list[j].no),
+          keepQuestion: list[i],
+          replaceQuestion: list[j],
+          reason,
+        });
+      }
+    }
+  }
+  return pairs;
+}
+
+async function autoResolveLikelyDuplicateQuestions(allQuestions, sourceText){
+  let questions = Array.isArray(allQuestions) ? allQuestions.slice().sort((a,b)=>Number(a.no) - Number(b.no)) : [];
+  const cleanedSourceText = preprocessSourceText(sourceText) || sourceText;
+  const replacedNos = [];
+  const errors = [];
+
+  for(let round = 0; round < DUPLICATE_FIX_MAX_ROUNDS; round++){
+    const pairs = findLikelyDuplicatePairs(questions);
+    if(!pairs.length) break;
+
+    const targets = [];
+    const targetReasons = {};
+    for(const pair of pairs){
+      if(!targets.includes(pair.replaceNo)){
+        targets.push(pair.replaceNo);
+        targetReasons[pair.replaceNo] = pair.reason;
+      }
+      if(targets.length >= DUPLICATE_FIX_MAX_ITEMS_PER_ROUND) break;
+    }
+
+    for(const targetNo of targets){
+      const original = questions.find(q => Number(q.no) === Number(targetNo));
+      if(!original) continue;
+      const keptQuestions = questions.filter(q => Number(q.no) !== Number(targetNo));
+      const promptTemplate = buildReplacementPromptTemplate([original], keptQuestions, {
+        overrideInstructions: {
+          [String(targetNo)]: 'Replace this item with a clearly distinct, non-overlapping question. It must test a different learning point from every kept question, not a paraphrase or minor variant. Use a different fact, concept, mechanism, indication, interpretation, definition, timing, severity, or comparison from the source.'
+        },
+        extraGlobalInstructions: '- Double-check the whole kept set before answering.\n- Any replacement that overlaps with a kept item in concept or tested takeaway is unacceptable, even if the wording differs.',
+      });
+
+      try{
+        const json = await callGenerateQuizChunk(
+          cleanedSourceText || sourceText,
+          1,
+          `${state.title || 'Generated Quiz'} unique revision`,
+          { promptTemplate }
+        );
+        const candidate = (Array.isArray(json.questions) ? json.questions[0] : null) || {};
+        const replacement = {
+          ...candidate,
+          no: original.no,
+          _sourceChunk: cleanedSourceText || sourceText,
+          explanation_addendum_en: original.explanation_addendum_en || '',
+          explanation_addendum_ja: original.explanation_addendum_ja || '',
+        };
+        questions = questions
+          .map(q => Number(q.no) === Number(targetNo) ? replacement : q)
+          .sort((a,b)=>Number(a.no) - Number(b.no));
+        replacedNos.push(Number(targetNo));
+      }catch(err){
+        errors.push(`Q${targetNo}: ${err?.message || err}`);
+      }
+    }
+  }
+
+  return {
+    questions,
+    replacedNos,
+    remainingPairs: findLikelyDuplicatePairs(questions),
+    errors,
+  };
+}
+
+function buildReplacementPromptTemplate(groupQuestions, keptQuestions, options={}){
   const flaggedText = groupQuestions.map(q => {
-    const note = (state.reviewNotes[String(q.no)] || '').trim();
+    const note = (options.overrideInstructions && options.overrideInstructions[String(q.no)]) || (state.reviewNotes[String(q.no)] || '').trim();
     return [
       `Slot ${q.no}`,
       `Current English question: ${compactPromptText(q.question_en, 360)}`,
@@ -1035,7 +1208,8 @@ Follow these rules strictly:
 - Set the "no" field of each returned item to the original slot number shown below.
 - Keep the output bilingual in English and Japanese.
 - Keep the output schema exactly.
-- Do not duplicate the remaining kept questions listed below.
+- Do not duplicate the remaining kept questions listed below, including near-duplicates that only rephrase the same learning point.
+- Each replacement must test a genuinely distinct learning point from the kept questions, not a paraphrase or minor variation.
 - Treat each mandatory reviewer instruction below as a hard requirement.
 - If a reviewer instruction conflicts with the current question, rewrite the question so that the instruction is satisfied.
 - Do not create questions from reference lists, bibliography entries, author lists, acknowledgments, client information, further reading lists, or citation-only material.
@@ -1044,17 +1218,26 @@ Follow these rules strictly:
 - Questions must read like standalone exam items, not like reading-comprehension questions about a chapter or passage.
 - Never mention the chapter, text, textbook, excerpt, passage, source text, 本文, 抜粋文, この章, このチャプター, この教科書, or このテキスト in the question stem or explanation.
 - Before finalizing each question, rewrite any text-referential wording into a general-knowledge wording.
+- Each question must test a distinct learning point from the source.
+- Do not ask the same fact, concept, mechanism, indication, interpretation, definition, or comparison more than once, even with different wording or a different correct option.
+- Before finalizing the full set, compare all items and replace any overlapping or near-duplicate question with a different high-yield point from the source.
 - Make distractors genuinely competitive:
   - Each incorrect option should sound plausible to a learner with partial understanding.
-  - Keep all four options in the same domain, same level of specificity, and similar length/tone.
+  - Keep all four options in the same domain, same level of specificity, similar tone, and roughly similar length.
+  - Make the four options structurally parallel whenever possible.
+  - Do not make the correct answer systematically longer, more qualified, more nuanced, or more information-dense than the distractors.
+  - Avoid patterns where one option stands out because it contains extra conditions, extra detail, or noticeably greater precision.
+  - If one option needs a qualifier, consider whether comparable qualifiers should be added to the other options so the set remains balanced.
   - Avoid absurd, opposite, unrelated, or giveaway distractors.
-  - Avoid options that can be ruled out instantly because they are too broad, too narrow, or grammatically mismatched.
+  - Avoid options that can be ruled out instantly because they are too broad, too narrow, grammatically mismatched, or stylistically different.
   - Prefer nuanced distinctions in mechanism, indication, interpretation, timing, severity, definition, or comparative appropriateness.
-- Avoid obvious giveaway wording such as "always", "never", "only", "exclusively", "不要", "常に", and "十分である".
+- Do not make an incorrect option wrong mainly because it uses lexical giveaway cues such as "always", "never", "only", "alone", "exclusively", "solely", "entirely", "completely", "all", "none", "must", "impossible", "不要", "必ず", "常に", "のみ", or "だけ".
+- An incorrect option must be incorrect for a substantive content reason, not merely because of extreme, absolute, or exclusive wording.
+- Before finalizing each item, check whether one option is easier to eliminate because of wording, length, or style; if so, rewrite the full option set to make it more even.
 - Include a brief explanation in English and Japanese.
 - Include brief choice-by-choice explanations in English and Japanese for options A, B, C, and D, explaining why the correct answer is correct and why each incorrect option is not the best answer.
 - Include a short supporting excerpt copied or lightly trimmed from the source text.
-- Return JSON only.
+${options.extraGlobalInstructions ? options.extraGlobalInstructions.trim() + "\n" : ""}- Return JSON only.
 
 Flagged slots to replace:
 ${flaggedText}
@@ -1441,7 +1624,7 @@ async function generateQuizWithAI(){
     );
     applyGeneratedMetadata(json);
     allQuestions = (Array.isArray(json.questions) ? json.questions : []).map(q => ({ ...q, _sourceChunk: sourceText }));
-    state.aiStatus = 'AI作問が完了しました。タイトル・説明も本文から自動生成しました。レビューしてから保存できます。';
+    state.aiStatus = 'AI作問が完了しました。タイトル・説明を生成し、内容重複も自動チェックしました。レビューしてから保存できます。';
   } else {
     const chunks = splitSourceIntoChunks(sourceText, Number(state.questionCount || 10));
     const allocations = allocateQuestions(Number(state.questionCount || 10), chunks);
@@ -1470,19 +1653,33 @@ async function generateQuizWithAI(){
     }
 
     allQuestions = allQuestions.slice(0, Number(state.questionCount || 10));
-    state.aiStatus = `長文モードでのAI作問が完了しました。${chunks.length}分割を結合し、タイトル・説明も本文から自動生成しました。レビューしてから保存できます。`;
+    state.aiStatus = `長文モードでのAI作問が完了しました。${chunks.length}分割を結合し、タイトル・説明も本文から自動生成し、内容重複も自動チェックしました。レビューしてから保存できます。`;
   }
 
   allQuestions = allQuestions.map((q, i) => ({ ...q, no: i + 1 }));
+
+  state.aiStatus = '内容の重複がないか確認しています...';
+  render();
+  const duplicateFixResult = await autoResolveLikelyDuplicateQuestions(allQuestions, sourceText);
+  allQuestions = duplicateFixResult.questions;
 
   state.previewQuestions = allQuestions;
   state.questions = [];
   state.shareLink = '';
   state.shareLinks = { en: '', ja: '' };
   state.status = '生成された問題をレビューしてください。レビュー後に英語版URLと日本語版URLをそれぞれ作れます。';
-  state.reviewStatus = '';
-  state.reviewError = '';
   clearReviewSelections();
+  state.reviewError = duplicateFixResult.errors.length ? `重複修正の一部に失敗しました: ${duplicateFixResult.errors.join(' / ')}` : '';
+  state.reviewStatus = duplicateFixResult.remainingPairs.length
+    ? `内容が近い可能性のある問題がまだ ${duplicateFixResult.remainingPairs.length} 組あります。必要なら個別に作り直してください。`
+    : (duplicateFixResult.replacedNos.length
+      ? `内容が重複しそうだった問題 ${duplicateFixResult.replacedNos.length} 件を自動で差し替えました。`
+      : '問題間の内容重複チェックを行いました。');
+  state.aiStatus = duplicateFixResult.remainingPairs.length
+    ? 'AI作問が完了しました。内容が近い問題が少し残っている可能性があるので、レビュー時に確認してください。'
+    : (duplicateFixResult.replacedNos.length
+      ? `AI作問が完了しました。内容が重複しそうだった問題 ${duplicateFixResult.replacedNos.length} 件を自動で差し替えました。`
+      : 'AI作問が完了しました。内容重複も自動チェックしました。');
   state.generatedEnTsv = makeTsvEnFromQuestions(allQuestions);
   state.generatedJaTsv = makeTsvJaFromQuestions(allQuestions);
   state.aiError = '';
@@ -1501,7 +1698,7 @@ async function regenerateSingleQuestion(no){
 
   const chunkText = original._sourceChunk || state.sourceText.trim();
   const cleanedChunkText = preprocessSourceText(chunkText);
-  const keptQuestions = state.previewQuestions.filter(q => (q._sourceChunk || state.sourceText.trim()) === chunkText && Number(q.no) !== targetNo);
+  const keptQuestions = state.previewQuestions.filter(q => Number(q.no) !== targetNo);
   const promptTemplate = buildReplacementPromptTemplate([original], keptQuestions);
 
   state.reviewBusyNo = targetNo;
