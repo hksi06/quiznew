@@ -90,121 +90,55 @@ const SAMPLE_TSV = `No	Question	Option A	Option B	Option C	Option D	Correct Answ
 1	Which statement about an ideal renal biomarker is appropriate?	It should show wide biologic variability and partial protein binding.	It should be easy to measure and cost-effective.	It should undergo substantial non-renal metabolism.	It should be secreted and reabsorbed by the tubules.	B	The chapter lists easy measurability and cost-effectiveness among the ideal properties of a renal biomarker.	The ideal properties of a renal biomarker include ... easy measurability, and cost-effectiveness.`;
 
 const DEFAULT_PROMPT_LANGUAGE = 'ja';
-const PROMPT_DEFAULTS_VERSION = 2;
+const PROMPT_DEFAULTS_VERSION = 4;
 
-const DEFAULT_SYSTEM_PROMPT_EN = `You create high-quality bilingual veterinary textbook quizzes and very short quiz metadata, and follow the requested output schema exactly. Questions must read like standalone exam items that test general knowledge derived from the source, not like reading-comprehension questions about a specific chapter, text, passage, excerpt, or textbook. Across a set, questions should cover distinct learning points and should not repeat the same concept in paraphrased form. Distractors must be subtle, plausible, and parallel to the correct answer rather than obviously wrong, absurd, or from an unrelated domain. Options should be structurally parallel and roughly balanced in length and information density, and incorrect options should be incorrect for substantive content reasons rather than giveaway wording. When metadata is requested, keep it extremely short and chapter-like.`;
+const DEFAULT_SYSTEM_PROMPT_JA = `あなたは、獣医系教科書本文から高品質な日英バイリンガル4択問題と短いクイズ用メタデータを作成し、指定された出力スキーマに厳密に従います。問題は本文から導かれる一般知識を問う独立した試験問題として書き、章・本文・抜粋・教科書そのものへの言及や読解問題の体裁にしてはいけません。1セット内では異なる学習ポイントを扱い、言い換えただけの重複問題を作らないでください。誤答選択肢はもっともらしく競争力があり、4つの選択肢は同じ粒度・近い長さ・近い文体・できるだけ平行な構造にそろえてください。誤答は語感ではなく内容上の理由で誤答になるようにしてください。title と description は保存一覧で見やすい短い章タイトル風にしてください。`;
 
-const DEFAULT_PROMPT_TEMPLATE_EN = `You are creating bilingual multiple-choice quiz questions from a textbook excerpt.
+const DEFAULT_PROMPT_TEMPLATE_JA = `教科書本文から、日英バイリンガルの4択クイズを作成してください。
 
-Follow these rules strictly:
-- Use only the provided source text as evidence.
-- Do not use outside knowledge.
-- Create exactly {{questionCount}} four-option multiple-choice questions.
-- Output both English and Japanese versions for each question.
-- Use natural Japanese.
-- Also generate quiz metadata:
-  - title: a very short saved-quiz title. If the source explicitly shows a chapter number or chapter label, prefer a format like "Ch 12: Renal Biomarkers". If no chapter number is shown, use only a very short topic title.
-  - description: only a very short chapter title or topic label, ideally 2-6 words, not a sentence, not bilingual, and without explanatory phrasing.
-- The title and description should be brief enough to scan easily in a saved quiz list.
-- Do not write a summary sentence.
-- Do not mention the chapter, text, textbook, excerpt, passage, source text, 本文, 抜粋文, この章, このチャプター, この教科書, このテキスト, or reading-comprehension framing, except that an explicit chapter marker like "Ch 12" is allowed when it is clearly present in the source.
-- The question stem should ask what is correct/appropriate, not "which matches the text".
-- Questions must read like standalone exam items, not like reading-comprehension questions about a chapter or passage.
-- Never mention the chapter, text, textbook, excerpt, passage, source text, 本文, 抜粋文, この章, このチャプター, この教科書, or このテキスト in the question stem or explanation.
-- Before finalizing each question, rewrite any text-referential wording into a general-knowledge wording.
-- Each question must test a distinct learning point from the source.
-- Do not ask the same fact, concept, mechanism, indication, interpretation, definition, or comparison more than once, even with different wording or a different correct option.
-- Before finalizing the full set, compare all items and replace any overlapping or near-duplicate question with a different high-yield point from the source.
-- Make distractors genuinely competitive:
-  - Each incorrect option should sound plausible to a learner with partial understanding.
-  - Keep all four options in the same domain, same level of specificity, similar tone, and roughly similar length.
-  - Make the four options structurally parallel whenever possible.
-  - Do not make the correct answer systematically longer, more qualified, more nuanced, or more information-dense than the distractors.
-  - Avoid patterns where one option stands out because it contains extra conditions, extra detail, or noticeably greater precision.
-  - If one option needs a qualifier, consider whether comparable qualifiers should be added to the other options so the set remains balanced.
-  - Avoid absurd, opposite, unrelated, or giveaway distractors.
-  - Avoid options that can be ruled out instantly because they are too broad, too narrow, grammatically mismatched, or stylistically different.
-  - Prefer nuanced distinctions in mechanism, indication, interpretation, timing, severity, definition, or comparative appropriateness.
-- Do not make an incorrect option wrong mainly because it uses lexical giveaway cues such as "always", "never", "only", "alone", "exclusively", "solely", "entirely", "completely", "all", "none", "must", "impossible", "不要", "必ず", "常に", "のみ", or "だけ".
-- An incorrect option must be incorrect for a substantive content reason, not merely because of extreme, absolute, or exclusive wording.
-- Before finalizing each item, check whether one option is easier to eliminate because of wording, length, or style; if so, rewrite the full option set to make it more even.
-- Do not bold the correct answer.
-- Randomize correct answer positions across questions.
-- Include a brief explanation in English and Japanese.
-- Include brief choice-by-choice explanations in English and Japanese for options A, B, C, and D, explaining why the correct answer is correct and why each incorrect option is not the best answer.
-- Include a short supporting excerpt copied or lightly trimmed from the source text.
-- If an abbreviation first appears in a question or explanation, spell it out first.
-- Do not create questions from reference lists, bibliography entries, author lists, acknowledgments, client information, further reading lists, or citation-only material.
-- If such non-teaching sections appear in the pasted text, ignore them and use only the substantive textbook content.
-- Return JSON only.
-- The output must match the schema exactly.
-・教科書によると、囲み記事では、本文では、このテキストでは、抜粋文では、などの表現を使わず、一般的な知識を問う問題文にしてください。
-・問題文は独立した試験問題のように見える文章にしてください。
-・誤答選択肢は、部分理解の受験者なら選びうるもっともらしい内容にしてください。
-・誤答選択肢は、極端に不自然、露骨に逆、本文と無関係、長さや粒度が明らかに不揃い、という形にしないでください。
-・4つの選択肢は、同じ話題・同じ粒度・近い長さ・近い文体でそろえ、可能な限り文の構造も平行にしてください。
-・正答だけが不自然に長い、条件が多い、限定句が多い、情報量が多い、という形にしないでください。
-・1つの選択肢だけが詳細で、他が短く粗い、というセットを避けてください。
-・誤答は、only、alone、exclusively、solely、always、never、必ず、常に、のみ、だけ などの語だけで簡単に消去できる形にしないでください。
-・誤答は、語感ではなく内容上の理由で誤答になるようにしてください。
-・各問題は、本文中の異なる学習ポイントを問うようにしてください。
-・言い換えただけで同じ内容を問う問題、同じ事実・概念・機序・適応・解釈・定義・比較を繰り返す問題を作らないでください。
-・全体を見直して、内容が重複または近接している問題があれば、本文中の別の重要ポイントを問う問題に置き換えてください。
-・引用文献リスト、参考文献、著者情報、謝辞、client information などから作問しないでください。
-・title は保存済みクイズ一覧で見やすい、短い章タイトル風の表現にしてください。章番号が明示されていれば Ch 12: Renal Biomarkers のような形を優先してください。description は短い章タイトルだけにし、1文の要約や bilingual 形式にはしないでください。
-
-Source text:
-"""{{sourceText}}"""`;
-
-const DEFAULT_SYSTEM_PROMPT_JA = `あなたは、高品質な日英バイリンガルの獣医系教科書クイズと、ごく短いクイズ用メタデータを作成し、指定された出力スキーマに正確に従います。問題は、本文から導かれる一般知識を問う独立した試験問題のように見える必要があり、特定の章・本文・パッセージ・抜粋・教科書の読解問題のようにしてはいけません。1セットの中では異なる学習ポイントを幅広くカバーし、言い換えただけの重複問題を作らないでください。誤答選択肢は露骨な誤りではなく、正答と並べてももっともらしく見える微妙で競争力のある内容にしてください。4つの選択肢は構造・長さ・情報量をできるだけそろえ、誤答は語感ではなく内容上の理由で誤答になるようにしてください。メタデータを作るときは、極力短く、章タイトル風の表現にしてください。`;
-
-const DEFAULT_PROMPT_TEMPLATE_JA = `教科書の抜粋から、日英バイリンガルの4択クイズを作成してください。
-
-以下のルールを厳守してください。
+以下を厳守してください。
 - 根拠として使ってよいのは、貼り付けられた source text のみです。
 - 外部知識は使わないでください。
 - 4択問題をちょうど {{questionCount}} 問作成してください。
 - 各問題について、英語版と日本語版の両方を出力してください。
 - 日本語は自然な表現にしてください。
 - クイズ用メタデータも同時に作成してください。
-  - title: 保存済みクイズ一覧で見やすい、ごく短いタイトル。本文に章番号や chapter 表記が明示されている場合は、Ch 12: Renal Biomarkers のような形を優先してください。章番号が見当たらない場合は、ごく短いトピック名だけにしてください。
-  - description: ごく短い章タイトルまたはトピック名だけにしてください。理想は 2〜6 語程度で、文章にせず、bilingual 形式にもせず、説明的な言い回しも避けてください。
-- title と description は、保存済みクイズ一覧で一目で読める短さにしてください。
-- 要約文は書かないでください。
+  - title: 保存済みクイズ一覧で見やすい短いタイトル。本文に章番号が明示されていれば、Ch 12: Renal Biomarkers のような形を優先してください。章番号がなければ短いトピック名だけにしてください。
+  - description: ごく短い章タイトルまたはトピック名だけにしてください。1文の要約にせず、説明的にしすぎないでください。
 - 問題文は「どれが本文に一致するか」ではなく、「どれが正しいか／適切か」を問う形にしてください。
-- 問題文は、章やパッセージの読解問題ではなく、独立した試験問題のように見えるようにしてください。
-- 問題文や解説の中で、章・本文・教科書・抜粋・source text・本文・抜粋文・この章・このチャプター・この教科書・このテキスト などに言及しないでください。ただし、本文に章番号が明確に書かれている場合に限り、metadata の title で Ch 12 のような表現を使うのは構いません。
-- 文章中に本文依存の言い回しがあれば、必ず一般知識を問う表現に書き換えてください。
-- 各問題は、本文中の異なる学習ポイントを問うようにしてください。
-- 同じ事実・概念・機序・適応・解釈・定義・比較を、言い換えただけで繰り返し問わないでください。
-- 全体を見直し、重複または近接している問題があれば、本文中の別の重要ポイントを問う問題に置き換えてください。
-- 誤答選択肢は競争力のあるものにしてください。
-  - 誤答も、部分理解の受験者であれば選びうるもっともらしい内容にしてください。
-  - 4つの選択肢は、同じ話題・同じ粒度・近い長さ・近い文体でそろえてください。
-  - 可能な限り、4つの選択肢の文の構造も平行にしてください。
-  - 正答だけが不自然に長い、条件が多い、情報量が多い、限定句が多い、という形にしないでください。
-  - 1つだけが過度に詳細で、他が短く粗い選択肢セットを避けてください。
-  - 極端に不自然、露骨に逆、本文と無関係、文法や文体だけで簡単に消去できる選択肢を避けてください。
-  - 機序・適応・解釈・タイミング・重症度・定義・比較の微妙な違いで競う選択肢を優先してください。
-- 誤答は、always / never / only / alone / exclusively / solely / entirely / completely / all / none / must / impossible / 不要 / 必ず / 常に / のみ / だけ のような giveaway wording だけで簡単に消去できる形にしないでください。
+- 問題文と解説では、本文・抜粋・この章・このチャプター・この教科書・このテキスト・source text などへの言及をしないでください。
+- 本文依存の言い回しが出たら、一般知識を問う表現に書き換えてください。
+- 各問題は本文中の異なる学習ポイントを問うようにしてください。
+- 同じ事実・概念・機序・適応・解釈・定義・比較を、言い換えただけで重複して問わないでください。
+- 全体を見直し、近い内容の問題があれば、本文中の別の重要ポイントを問う問題に置き換えてください。
+
+- 誤答選択肢はもっともらしく、部分理解の受験者なら選びうる内容にしてください。
+- 4つの選択肢は、同じ話題・同じ粒度・近い長さ・近い文体でそろえてください。
+- 可能な限り、4つの選択肢の文の構造も平行にしてください。
+- 正答だけが不自然に長い、条件が多い、情報量が多い、限定句が多い、という形にしないでください。
+- 1つの選択肢だけが過度に詳細で、他が短く粗い、というセットを避けてください。
+- 極端に不自然、露骨に逆、本文と無関係、文法や文体だけで簡単に消去できる選択肢を避けてください。
+- 機序・適応・解釈・タイミング・重症度・定義・比較の微妙な違いで競う選択肢を優先してください。
+- 誤答は、always / never / only / alone / exclusively / solely / entirely / completely / all / none / must / impossible / 必ず / 常に / のみ / だけ / 不要 などの語だけで簡単に消去できる形にしないでください。
 - 誤答は、極端・絶対・排他的な言い回しだから誤答なのではなく、内容上の理由で誤答になるようにしてください。
-- 最終確認の際には、長さ・文体・精密さ・語感の点で1つの選択肢だけが目立っていないか確認し、目立つ場合は4択全体を書き直して均質化してください。
+- 最終確認で、1つの選択肢だけが長さ・文体・精密さ・語感の点で目立っていたら、4択全体を書き直して均質化してください。
+
 - 正答は太字にしないでください。
 - 正答位置は問題全体で散らしてください。
 - 英語と日本語の両方で、簡潔な解説を付けてください。
 - A, B, C, D の各選択肢について、英語と日本語の両方で短い choice-by-choice explanation を付けてください。
 - supporting excerpt として、source text から短い該当箇所をそのまま、または軽く整えて引用してください。
 - 略語が問題文や解説に初出する場合は、最初にフルスペルを書いてください。
-- 引用文献リスト、参考文献、著者情報、謝辞、client information、further reading、citation-only material からは作問しないでください。
-- そのような教育本文ではないセクションが貼り付けられていても無視し、本文の実質的な内容だけを使ってください。
+- 参考文献、著者情報、謝辞、client information、further reading、citation-only material からは作問しないでください。
+- そのような教育本文ではないセクションが貼り付けられていても無視してください。
 - 出力は JSON のみとしてください。
 - 出力はスキーマに正確に一致させてください。
 
 Source text:
 """{{sourceText}}"""`;
 
-const DEFAULT_SYSTEM_PROMPT = DEFAULT_PROMPT_LANGUAGE === 'en' ? DEFAULT_SYSTEM_PROMPT_EN : DEFAULT_SYSTEM_PROMPT_JA;
-const DEFAULT_PROMPT_TEMPLATE = DEFAULT_PROMPT_LANGUAGE === 'en' ? DEFAULT_PROMPT_TEMPLATE_EN : DEFAULT_PROMPT_TEMPLATE_JA;
+const DEFAULT_SYSTEM_PROMPT = DEFAULT_SYSTEM_PROMPT_JA;
+const DEFAULT_PROMPT_TEMPLATE = DEFAULT_PROMPT_TEMPLATE_JA;
 
 function escapeHtml(s=''){ return s.replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
 function norm(s=''){ return s.toLowerCase().replace(/[\s_\-・（）()]/g,'').replace(/：/g,'').trim(); }
@@ -602,8 +536,6 @@ const state = {
   promptLanguage: DEFAULT_PROMPT_LANGUAGE,
   systemPromptJa: DEFAULT_SYSTEM_PROMPT_JA,
   promptTemplateJa: DEFAULT_PROMPT_TEMPLATE_JA,
-  systemPromptEn: DEFAULT_SYSTEM_PROMPT_EN,
-  promptTemplateEn: DEFAULT_PROMPT_TEMPLATE_EN,
   systemPrompt: DEFAULT_SYSTEM_PROMPT,
   promptTemplate: DEFAULT_PROMPT_TEMPLATE,
   autoSaveLanguage: 'en',
@@ -788,47 +720,41 @@ function clearBuilderVolatileState({ discardSnapshot = false } = {}){
   }
 }
 
-function getDefaultSystemPromptForLanguage(lang='ja'){
-  return lang === 'en' ? DEFAULT_SYSTEM_PROMPT_EN : DEFAULT_SYSTEM_PROMPT_JA;
+function getDefaultSystemPromptForLanguage(_lang='ja'){
+  return DEFAULT_SYSTEM_PROMPT_JA;
 }
 
-function getDefaultPromptTemplateForLanguage(lang='ja'){
-  return lang === 'en' ? DEFAULT_PROMPT_TEMPLATE_EN : DEFAULT_PROMPT_TEMPLATE_JA;
+function getDefaultPromptTemplateForLanguage(_lang='ja'){
+  return DEFAULT_PROMPT_TEMPLATE_JA;
 }
 
-function getPromptFieldKey(kind='system', lang='ja'){
-  const suffix = lang === 'en' ? 'En' : 'Ja';
-  return `${kind === 'template' ? 'promptTemplate' : 'systemPrompt'}${suffix}`;
+function getPromptFieldKey(kind='system', _lang='ja'){
+  return kind === 'template' ? 'promptTemplateJa' : 'systemPromptJa';
 }
 
 function syncActivePromptFromLanguage(){
-  const lang = state.promptLanguage === 'en' ? 'en' : 'ja';
-  state.promptLanguage = lang;
-  state.systemPrompt = state[getPromptFieldKey('system', lang)] || getDefaultSystemPromptForLanguage(lang);
-  state.promptTemplate = state[getPromptFieldKey('template', lang)] || getDefaultPromptTemplateForLanguage(lang);
+  state.promptLanguage = 'ja';
+  state.systemPrompt = state.systemPromptJa || DEFAULT_SYSTEM_PROMPT_JA;
+  state.promptTemplate = state.promptTemplateJa || DEFAULT_PROMPT_TEMPLATE_JA;
 }
 
-function updatePromptField(lang='ja', kind='system', value=''){
-  const key = getPromptFieldKey(kind, lang);
+function updatePromptField(_lang='ja', kind='system', value=''){
+  const key = getPromptFieldKey(kind, 'ja');
   state[key] = String(value || '');
-  if((state.promptLanguage || DEFAULT_PROMPT_LANGUAGE) === lang){
-    syncActivePromptFromLanguage();
-  }
+  syncActivePromptFromLanguage();
   syncPromptMode();
 }
 
-function setPromptLanguage(lang='ja'){
-  state.promptLanguage = lang === 'en' ? 'en' : 'ja';
+function setPromptLanguage(_lang='ja'){
+  state.promptLanguage = 'ja';
   syncActivePromptFromLanguage();
   syncPromptMode();
 }
 
 function resetPromptSettingsToDefaults(){
+  state.promptLanguage = 'ja';
   state.systemPromptJa = DEFAULT_SYSTEM_PROMPT_JA;
   state.promptTemplateJa = DEFAULT_PROMPT_TEMPLATE_JA;
-  state.systemPromptEn = DEFAULT_SYSTEM_PROMPT_EN;
-  state.promptTemplateEn = DEFAULT_PROMPT_TEMPLATE_EN;
-  if(!state.promptLanguage) state.promptLanguage = DEFAULT_PROMPT_LANGUAGE;
   syncActivePromptFromLanguage();
   syncPromptMode();
 }
@@ -841,14 +767,14 @@ ${promptTemplate || ''}`;
   return jaCount > (enCount * 0.55) ? 'ja' : 'en';
 }
 
-function isPromptSettingsDefaultForLanguage(lang='ja'){
-  return (state[getPromptFieldKey('system', lang)] || '') === getDefaultSystemPromptForLanguage(lang)
-    && (state[getPromptFieldKey('template', lang)] || '') === getDefaultPromptTemplateForLanguage(lang);
+function isPromptSettingsDefaultForLanguage(_lang='ja'){
+  return (state.systemPromptJa || '') === DEFAULT_SYSTEM_PROMPT_JA
+    && (state.promptTemplateJa || '') === DEFAULT_PROMPT_TEMPLATE_JA;
 }
 
 function syncPromptMode(){
   syncActivePromptFromLanguage();
-  state.promptMode = (isPromptSettingsDefaultForLanguage('ja') && isPromptSettingsDefaultForLanguage('en')) ? 'default' : 'custom';
+  state.promptMode = isPromptSettingsDefaultForLanguage('ja') ? 'default' : 'custom';
 }
 
 function saveLocal(){
@@ -861,11 +787,9 @@ function saveLocal(){
     shuffleChoices: state.shuffleChoices,
     promptMode: state.promptMode,
     promptDefaultsVersion: PROMPT_DEFAULTS_VERSION,
-    promptLanguage: state.promptLanguage || DEFAULT_PROMPT_LANGUAGE,
+    promptLanguage: 'ja',
     systemPromptJa: state.systemPromptJa || DEFAULT_SYSTEM_PROMPT_JA,
     promptTemplateJa: state.promptTemplateJa || DEFAULT_PROMPT_TEMPLATE_JA,
-    systemPromptEn: state.systemPromptEn || DEFAULT_SYSTEM_PROMPT_EN,
-    promptTemplateEn: state.promptTemplateEn || DEFAULT_PROMPT_TEMPLATE_EN,
     systemPrompt: state.systemPrompt || DEFAULT_SYSTEM_PROMPT,
     promptTemplate: state.promptTemplate || DEFAULT_PROMPT_TEMPLATE,
     autoSaveLanguage: state.autoSaveLanguage,
@@ -890,18 +814,18 @@ function loadLocal(){
     state.listSort = s.listSort || 'created_desc';
     state.showHidden = !!s.showHidden;
 
-    if(Number(s.promptDefaultsVersion || 0) === PROMPT_DEFAULTS_VERSION && (s.systemPromptJa || s.promptTemplateJa || s.systemPromptEn || s.promptTemplateEn)){
-      state.promptLanguage = s.promptLanguage === 'en' ? 'en' : 'ja';
+    if(Number(s.promptDefaultsVersion || 0) === PROMPT_DEFAULTS_VERSION && (s.systemPromptJa || s.promptTemplateJa)){
+      state.promptLanguage = 'ja';
       state.systemPromptJa = s.systemPromptJa || DEFAULT_SYSTEM_PROMPT_JA;
       state.promptTemplateJa = s.promptTemplateJa || DEFAULT_PROMPT_TEMPLATE_JA;
-      state.systemPromptEn = s.systemPromptEn || DEFAULT_SYSTEM_PROMPT_EN;
-      state.promptTemplateEn = s.promptTemplateEn || DEFAULT_PROMPT_TEMPLATE_EN;
     }else if(s.promptMode === 'custom' && s.systemPrompt && s.promptTemplate){
-      state.promptLanguage = 'en';
-      state.systemPromptJa = DEFAULT_SYSTEM_PROMPT_JA;
-      state.promptTemplateJa = DEFAULT_PROMPT_TEMPLATE_JA;
-      state.systemPromptEn = s.systemPrompt || DEFAULT_SYSTEM_PROMPT_EN;
-      state.promptTemplateEn = s.promptTemplate || DEFAULT_PROMPT_TEMPLATE_EN;
+      state.promptLanguage = 'ja';
+      if(guessPromptLanguage(s.systemPrompt || '', s.promptTemplate || '') === 'ja'){
+        state.systemPromptJa = s.systemPrompt || DEFAULT_SYSTEM_PROMPT_JA;
+        state.promptTemplateJa = s.promptTemplate || DEFAULT_PROMPT_TEMPLATE_JA;
+      }else{
+        resetPromptSettingsToDefaults();
+      }
     }else{
       resetPromptSettingsToDefaults();
     }
@@ -986,12 +910,10 @@ function applyDraftData(raw={}, { sourceLabel='下書き' } = {}){
   state.questionCountMode = raw.question_count_mode === 'manual' ? 'manual' : 'auto';
   state.shuffleQuestions = !!raw.shuffle_questions;
   state.shuffleChoices = !!raw.shuffle_choices;
-  const restoredPromptLanguage = guessPromptLanguage(raw.system_prompt || '', raw.prompt_template || '') || state.promptLanguage || DEFAULT_PROMPT_LANGUAGE;
-  state.promptLanguage = restoredPromptLanguage;
-  if(restoredPromptLanguage === 'en'){
-    state.systemPromptEn = raw.system_prompt || state.systemPromptEn || DEFAULT_SYSTEM_PROMPT_EN;
-    state.promptTemplateEn = raw.prompt_template || state.promptTemplateEn || DEFAULT_PROMPT_TEMPLATE_EN;
-  }else{
+  const restoredPromptLanguage = guessPromptLanguage(raw.system_prompt || '', raw.prompt_template || '');
+  state.promptLanguage = 'ja';
+  const ignoredEnglishDraftPrompt = restoredPromptLanguage === 'en' && !!(raw.system_prompt || raw.prompt_template);
+  if(!ignoredEnglishDraftPrompt){
     state.systemPromptJa = raw.system_prompt || state.systemPromptJa || DEFAULT_SYSTEM_PROMPT_JA;
     state.promptTemplateJa = raw.prompt_template || state.promptTemplateJa || DEFAULT_PROMPT_TEMPLATE_JA;
   }
@@ -1006,7 +928,7 @@ function applyDraftData(raw={}, { sourceLabel='下書き' } = {}){
   state.aiStatus = '';
   state.aiError = '';
   state.error = '';
-  state.status = `${sourceLabel}を読み込みました。レビューを続けるか、必要なら保存URLを作成できます。`;
+  state.status = `${sourceLabel}を読み込みました。レビューを続けるか、必要なら保存URLを作成できます。${ignoredEnglishDraftPrompt ? ' 下書きに保存されていた英語 prompt は JA-only 版のため復元していません。' : ''}`;
   state.questions = [];
   state.rendered = [];
   state.answers = {};
@@ -2073,72 +1995,42 @@ function render(){
 
       <details class="promptbox">
         <summary>Prompt settings</summary>
-        <p class="small muted">builder 上で日本語・英語の両方の prompt を見ながら調整できます。AI に送るのは、下で選んだ言語の prompt です。</p>
+        <p class="small muted">日本語 prompt だけを表示・編集する JA-only 版です。ここで修正した内容が、このブラウザでの既定 prompt として使われます。</p>
 
-        <div class="grid two" style="margin-top:12px; align-items:start;">
-          <div>
-            <label for="promptLanguage">AI に送る prompt 言語</label>
-            <select id="promptLanguage">
-              <option value="ja" ${state.promptLanguage === 'ja' ? 'selected' : ''}>Japanese</option>
-              <option value="en" ${state.promptLanguage === 'en' ? 'selected' : ''}>English</option>
-            </select>
-            <div class="small muted" style="margin-top:6px;">日本語で編集したいときは Japanese のままで大丈夫です。必要なら English 側も直接編集できます。</div>
-          </div>
-          <div class="alert info" style="margin:0;">
-            <div class="small">
-              <strong>使える置換タグ</strong><br>
-              <span class="mono">{{questionCount}}</span> と <span class="mono">{{sourceText}}</span> は実行時に置き換えられます。
-            </div>
+        <div class="alert info" style="margin-top:12px;">
+          <div class="small">
+            <strong>使える置換タグ</strong><br>
+            <span class="mono">{{questionCount}}</span> と <span class="mono">{{sourceText}}</span> は実行時に置き換えられます。
           </div>
         </div>
 
-        <div class="grid two" style="margin-top:12px; align-items:start;">
-          <div class="card" style="margin:0; border-color:${state.promptLanguage === 'ja' ? '#93c5fd' : '#e5e7eb'}; box-shadow:${state.promptLanguage === 'ja' ? '0 0 0 2px rgba(147,197,253,.18)' : 'none'};">
-            <div class="topbar" style="margin-bottom:8px;">
-              <div>
-                <h3 style="margin:0;">Japanese prompt</h3>
-                <div class="small muted">現在のデフォルト prompt も、この欄で日本語のまま確認・修正できます。</div>
-              </div>
-              ${state.promptLanguage === 'ja' ? '<span class="pill">active</span>' : ''}
-            </div>
+        <div class="card" style="margin:12px 0 0 0; border-color:#93c5fd; box-shadow:0 0 0 2px rgba(147,197,253,.18);">
+          <div class="topbar" style="margin-bottom:8px;">
             <div>
-              <label for="systemPromptJa">System prompt (Japanese)</label>
-              <textarea id="systemPromptJa" style="min-height:120px;">${escapeHtml(state.systemPromptJa)}</textarea>
+              <h3 style="margin:0;">Japanese prompt</h3>
+              <div class="small muted">AI に送る prompt はこの日本語 prompt のみです。英語 prompt の切替はありません。</div>
             </div>
-            <div style="margin-top:12px;">
-              <label for="promptTemplateJa">Prompt template (Japanese)</label>
-              <textarea id="promptTemplateJa" style="min-height:320px;">${escapeHtml(state.promptTemplateJa)}</textarea>
-            </div>
+            <span class="pill">active</span>
           </div>
-
-          <div class="card" style="margin:0; border-color:${state.promptLanguage === 'en' ? '#93c5fd' : '#e5e7eb'}; box-shadow:${state.promptLanguage === 'en' ? '0 0 0 2px rgba(147,197,253,.18)' : 'none'};">
-            <div class="topbar" style="margin-bottom:8px;">
-              <div>
-                <h3 style="margin:0;">English prompt</h3>
-                <div class="small muted">英語 prompt を使いたい場合はこちらを選びます。reference として見比べるだけでも使えます。</div>
-              </div>
-              ${state.promptLanguage === 'en' ? '<span class="pill">active</span>' : ''}
-            </div>
-            <div>
-              <label for="systemPromptEn">System prompt (English)</label>
-              <textarea id="systemPromptEn" style="min-height:120px;">${escapeHtml(state.systemPromptEn)}</textarea>
-            </div>
-            <div style="margin-top:12px;">
-              <label for="promptTemplateEn">Prompt template (English)</label>
-              <textarea id="promptTemplateEn" style="min-height:320px;">${escapeHtml(state.promptTemplateEn)}</textarea>
-            </div>
+          <div>
+            <label for="systemPromptJa">System prompt (Japanese)</label>
+            <textarea id="systemPromptJa" style="min-height:120px;">${escapeHtml(state.systemPromptJa)}</textarea>
+          </div>
+          <div style="margin-top:12px;">
+            <label for="promptTemplateJa">Prompt template (Japanese)</label>
+            <textarea id="promptTemplateJa" style="min-height:320px;">${escapeHtml(state.promptTemplateJa)}</textarea>
           </div>
         </div>
 
         <div class="alert info" style="margin-top:12px;">
           <div class="small">
             <strong>現在 AI に送る内容</strong><br>
-            ${state.promptLanguage === 'ja' ? 'Japanese prompt を送信します。' : 'English prompt を送信します。'} 必要なら生成前に切り替えできます。
+            Japanese prompt のみを送信します。
           </div>
         </div>
 
         <div class="btns">
-          <button class="secondary" id="resetPromptBtn">Reset prompts to defaults</button>
+          <button class="secondary" id="resetPromptBtn">Reset prompt to default</button>
         </div>
       </details>
 
@@ -2345,7 +2237,7 @@ function render(){
     };
   }
 
-  ['systemPromptJa','promptTemplateJa','systemPromptEn','promptTemplateEn','listSearch','generatedTitle','generatedDescription'].forEach(id=>{
+  ['systemPromptJa','promptTemplateJa','listSearch','generatedTitle','generatedDescription'].forEach(id=>{
     const el = document.getElementById(id);
     if(!el) return;
     el.addEventListener('input', e=>{
@@ -2407,19 +2299,9 @@ function render(){
   document.getElementById('shuffleQ').addEventListener('change', e=>{ state.shuffleQuestions = e.target.checked; saveLocal(); scheduleDraftSnapshotSave(); });
   document.getElementById('shuffleC').addEventListener('change', e=>{ state.shuffleChoices = e.target.checked; saveLocal(); scheduleDraftSnapshotSave(); });
 
-  const promptLanguageEl = document.getElementById('promptLanguage');
-  if(promptLanguageEl){
-    promptLanguageEl.addEventListener('change', e=>{
-      setPromptLanguage(e.target.value === 'en' ? 'en' : 'ja');
-      saveLocal();
-      scheduleDraftSnapshotSave();
-      render();
-    });
-  }
-
   document.getElementById('resetPromptBtn').onclick = ()=>{
     resetPromptSettingsToDefaults();
-    state.aiStatus = 'Japanese / English の prompt を両方デフォルトに戻しました。';
+    state.aiStatus = '日本語 prompt をデフォルトに戻しました。';
     state.aiError = '';
     saveLocal();
     scheduleDraftSnapshotSave();
